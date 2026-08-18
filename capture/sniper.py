@@ -47,6 +47,7 @@ class ScreenSniperOverlay(QWidget):
     - Unlimited Undo (Ctrl+Z), Quick Send (Enter), Copy (Ctrl+C), and Cancel (Esc).
     """
     captured = pyqtSignal(bytes)   # Emits PNG bytes on confirmation to upload
+    copied_local = pyqtSignal()   # Emits when image is copied to clipboard locally
     cancelled = pyqtSignal()       # Emits when capture is aborted
 
     def __init__(self, parent: Optional[QWidget] = None):
@@ -75,6 +76,7 @@ class ScreenSniperOverlay(QWidget):
         self._current_tool: str = "rect"
         self._current_color: QColor = QColor("#ED4245")
         self._toolbar: Optional[AnnotationToolbar] = None
+        self._is_finished: bool = False
 
     def start_capture(self) -> None:
         """
@@ -189,6 +191,7 @@ class ScreenSniperOverlay(QWidget):
             self._abort_capture()
             return
 
+        self._is_finished = True
         final_pixmap = self._history.render_all(self._full_screenshot, self._selected_rect)
         
         # Copy to QClipboard
@@ -199,7 +202,7 @@ class ScreenSniperOverlay(QWidget):
 
         logger.info("Copied annotated screenshot directly to clipboard")
         self.close()
-        self.cancelled.emit()
+        self.copied_local.emit()
 
     def _on_send(self) -> None:
         """Renders final annotated image and emits captured signal for Discord upload."""
@@ -207,6 +210,7 @@ class ScreenSniperOverlay(QWidget):
             self._abort_capture()
             return
 
+        self._is_finished = True
         final_pixmap = self._history.render_all(self._full_screenshot, self._selected_rect)
 
         buffer = QBuffer()
@@ -256,29 +260,31 @@ class ScreenSniperOverlay(QWidget):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(active_rect)
 
-            # 6. Size badge (when selecting)
-            if self._state == OverlayState.SELECTING:
-                badge_text = f"{active_rect.width()} × {active_rect.height()} px"
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            # 6. Size badge & Helpful hotkey hints
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            badge_text = f"{active_rect.width()} × {active_rect.height()} px"
+            
+            font_size = QFont("Segoe UI", 9, QFont.Weight.Bold)
+            painter.setFont(font_size)
 
-                badge_w = 110
-                badge_h = 24
-                badge_x = active_rect.x() + 5
-                badge_y = active_rect.bottom() + 8
+            badge_w = 110
+            badge_h = 24
+            badge_x = active_rect.x() + 4
+            badge_y = active_rect.top() - badge_h - 6
 
-                if badge_y + badge_h > self.height():
-                    badge_y = active_rect.top() - badge_h - 8
-                if badge_x + badge_w > self.width():
-                    badge_x = self.width() - badge_w - 5
+            # If top overflows, place inside top
+            if badge_y < 5:
+                badge_y = active_rect.top() + 6
+            if badge_x + badge_w > self.width() - 5:
+                badge_x = self.width() - badge_w - 5
 
-                badge_rect = QRect(badge_x, badge_y, badge_w, badge_h)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(30, 31, 34, 220))
-                painter.drawRoundedRect(badge_rect, 4, 4)
+            badge_rect = QRect(badge_x, badge_y, badge_w, badge_h)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(30, 31, 34, 230))
+            painter.drawRoundedRect(badge_rect, 5, 5)
 
-                painter.setPen(QColor(255, 255, 255))
-                painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+            painter.setPen(QColor(255, 255, 255))
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
 
         elif self._current_pos and self._state == OverlayState.READY:
             # Guide crosshairs
@@ -364,6 +370,12 @@ class ScreenSniperOverlay(QWidget):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         self._current_pos = event.pos()
+
+        # Update cursor when hovering over toolbar vs canvas
+        if self._toolbar and self._toolbar.isVisible() and self._toolbar.geometry().contains(self._current_pos):
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self.setCursor(Qt.CursorShape.CrossCursor)
 
         if self._state == OverlayState.SELECTING:
             self.update()
@@ -464,7 +476,16 @@ class ScreenSniperOverlay(QWidget):
             super().keyPressEvent(event)
 
     def _abort_capture(self) -> None:
+        if self._is_finished:
+            return
+        self._is_finished = True
         logger.info("Screen capture cancelled by user")
         self.close()
         self.cancelled.emit()
+
+    def closeEvent(self, event) -> None:
+        if not self._is_finished:
+            self._is_finished = True
+            self.cancelled.emit()
+        super().closeEvent(event)
 

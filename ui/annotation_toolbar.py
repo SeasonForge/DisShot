@@ -1,24 +1,38 @@
 import logging
 from typing import Optional, Callable
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QColor, QPainter, QBrush, QPen
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect, QRectF, QPointF
+from PyQt6.QtGui import (
+    QColor,
+    QPainter,
+    QBrush,
+    QPen,
+    QFont,
+    QPolygonF,
+    QPainterPath,
+)
 from PyQt6.QtWidgets import (
     QWidget,
     QHBoxLayout,
     QPushButton,
     QFrame,
     QButtonGroup,
-    QToolTip,
 )
 
 logger = logging.getLogger(__name__)
 
 TOOLBAR_STYLESHEET = """
 QFrame#toolbarContainer {
-    background-color: #2B2D31;
-    border: 1px solid #3F4147;
-    border-radius: 8px;
+    background-color: #1E1F22;
+    border: 1px solid #383A40;
+    border-radius: 10px;
     padding: 3px 6px;
+}
+
+QFrame#sectionFrame {
+    background-color: #2B2D31;
+    border: 1px solid #35373C;
+    border-radius: 7px;
+    padding: 2px;
 }
 
 QPushButton {
@@ -26,16 +40,14 @@ QPushButton {
     color: #DBDEE1;
     border: 1px solid transparent;
     border-radius: 5px;
-    font-size: 14px;
-    min-width: 28px;
-    max-width: 32px;
-    height: 28px;
-    padding: 2px;
+    height: 30px;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 QPushButton:hover {
     background-color: #35373C;
-    border-color: #4E5058;
+    color: #FFFFFF;
 }
 
 QPushButton:checked {
@@ -44,52 +56,158 @@ QPushButton:checked {
     border-color: #5865F2;
 }
 
-QPushButton#sendBtn {
-    background-color: #23A55A;
+QPushButton#actionCopy {
+    background-color: #2B2D31;
+    border: 1px solid #383A40;
+    color: #DBDEE1;
+    padding: 0 12px;
+    font-size: 12px;
+}
+
+QPushButton#actionCopy:hover {
+    background-color: #35373C;
+    border-color: #4E5058;
     color: #FFFFFF;
+}
+
+QPushButton#actionSend {
+    background-color: #5865F2;
+    border: 1px solid #5865F2;
+    color: #FFFFFF;
+    padding: 0 14px;
+    font-size: 12px;
     font-weight: bold;
-    min-width: 32px;
-    border-radius: 5px;
 }
 
-QPushButton#sendBtn:hover {
-    background-color: #1F924E;
+QPushButton#actionSend:hover {
+    background-color: #4752C4;
+    border-color: #4752C4;
 }
 
-QPushButton#cancelBtn {
+QPushButton#actionCancel {
+    color: #949BA4;
+    width: 28px;
+    padding: 0;
+    font-size: 14px;
+}
+
+QPushButton#actionCancel:hover {
+    background-color: rgba(242, 63, 67, 0.2);
     color: #F23F43;
-}
-
-QPushButton#cancelBtn:hover {
-    background-color: rgba(242, 63, 67, 0.15);
     border-color: #F23F43;
 }
 
 QFrame#separator {
-    background-color: #3F4147;
+    background-color: #383A40;
     width: 1px;
     max-width: 1px;
-    margin: 4px 2px;
+    margin: 4px 4px;
 }
 """
 
 AVAILABLE_COLORS = [
-    ("#ED4245", "Red"),
-    ("#FEE75C", "Yellow"),
-    ("#23A55A", "Green"),
-    ("#5865F2", "Discord Blurple"),
-    ("#FFFFFF", "White"),
+    ("#ED4245", "Красный"),
+    ("#FEE75C", "Жёлтый"),
+    ("#23A55A", "Зелёный"),
+    ("#5865F2", "Blurple"),
+    ("#FFFFFF", "Белый"),
 ]
 
 
+class VectorToolButton(QPushButton):
+    """
+    Crisp, anti-aliased vector icon button for annotation tools.
+    """
+    def __init__(self, icon_type: str, tooltip: str, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.icon_type = icon_type  # 'rect', 'arrow', 'pen', 'blur', 'undo'
+        self.setToolTip(tooltip)
+        self.setFixedSize(30, 30)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        icon_color = QColor("#FFFFFF") if self.isChecked() else (
+            QColor("#FFFFFF") if self.underMouse() else QColor("#B5BAC1")
+        )
+
+        w = self.width()
+        h = self.height()
+        cx = w / 2.0
+        cy = h / 2.0
+
+        if self.icon_type == "rect":
+            pen = QPen(icon_color, 2)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(cx - 6.5, cy - 6.5, 13.0, 13.0), 2.0, 2.0)
+
+        elif self.icon_type == "arrow":
+            pen = QPen(icon_color, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            # Shaft from bottom-left to top-right
+            p_start = QPointF(cx - 6.0, cy + 6.0)
+            p_end = QPointF(cx + 6.0, cy - 6.0)
+            painter.drawLine(p_start, p_end)
+            # Arrow head
+            painter.drawLine(p_end, QPointF(cx + 1.0, cy - 6.0))
+            painter.drawLine(p_end, QPointF(cx + 6.0, cy - 1.0))
+
+        elif self.icon_type == "pen":
+            pen = QPen(icon_color, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            # Diagonal pen body
+            painter.drawLine(QPointF(cx - 5.5, cy + 5.5), QPointF(cx + 4.5, cy - 4.5))
+            painter.drawLine(QPointF(cx - 6.0, cy + 6.0), QPointF(cx - 4.0, cy + 6.0))
+            painter.drawLine(QPointF(cx + 3.0, cy - 6.0), QPointF(cx + 6.0, cy - 3.0))
+
+        elif self.icon_type == "blur":
+            # 2x2 checkered mosaic block
+            painter.setPen(Qt.PenStyle.NoPen)
+            sz = 6.0
+            # Top-left & bottom-right filled
+            painter.setBrush(QBrush(icon_color))
+            painter.drawRect(QRectF(cx - sz, cy - sz, sz, sz))
+            painter.drawRect(QRectF(cx, cy, sz, sz))
+            # Other 2 outlined
+            pen = QPen(icon_color, 1)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(QRectF(cx, cy - sz, sz - 1, sz - 1))
+            painter.drawRect(QRectF(cx - sz, cy, sz - 1, sz - 1))
+
+        elif self.icon_type == "undo":
+            pen = QPen(icon_color, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            
+            # Curved back arrow path
+            path = QPainterPath()
+            path.moveTo(cx + 5.0, cy + 4.0)
+            path.arcTo(QRectF(cx - 4.0, cy - 5.0, 10.0, 10.0), 0, 180)
+            painter.drawPath(path)
+            
+            # Arrowhead pointing down-left
+            painter.drawLine(QPointF(cx - 4.0, cy), QPointF(cx - 7.0, cy - 2.0))
+            painter.drawLine(QPointF(cx - 4.0, cy), QPointF(cx - 4.0, cy - 6.0))
+
+        painter.end()
+
+
 class ColorButton(QPushButton):
-    """Circular color picker button."""
+    """Circular modern color picker button with smooth hover ring."""
     def __init__(self, hex_color: str, name: str, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.hex_color = hex_color
         self.setCheckable(True)
-        self.setToolTip(f"Color: {name}")
+        self.setToolTip(f"Цвет: {name}")
         self.setFixedSize(22, 22)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -99,10 +217,11 @@ class ColorButton(QPushButton):
         painter.setBrush(QBrush(color))
         
         if self.isChecked():
+            # Active indicator with outer white glow ring
             painter.setPen(QPen(QColor(255, 255, 255), 2))
             painter.drawEllipse(2, 2, 18, 18)
         else:
-            painter.setPen(QPen(QColor(60, 60, 60), 1))
+            painter.setPen(QPen(QColor(70, 70, 75), 1))
             painter.drawEllipse(3, 3, 16, 16)
         
         painter.end()
@@ -110,9 +229,9 @@ class ColorButton(QPushButton):
 
 class AnnotationToolbar(QWidget):
     """
-    Floating toolbar for screenshot drawing tools, color selection, and action triggers.
+    CleanShot / macOS style floating toolbar for screenshot annotations.
     """
-    tool_changed = pyqtSignal(str)          # 'rect', 'arrow', 'pen', 'blur', 'none'
+    tool_changed = pyqtSignal(str)          # 'rect', 'arrow', 'pen', 'blur'
     color_changed = pyqtSignal(QColor)
     undo_requested = pyqtSignal()
     copy_requested = pyqtSignal()
@@ -122,10 +241,11 @@ class AnnotationToolbar(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.current_tool = "rect"
-        self.current_color = QColor("#ED4245")  # Red by default
+        self.current_color = QColor("#ED4245")
 
         self.setStyleSheet(TOOLBAR_STYLESHEET)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setCursor(Qt.CursorShape.ArrowCursor)  # Normal pointer on toolbar container
         self._init_ui()
 
     def _init_ui(self):
@@ -135,50 +255,57 @@ class AnnotationToolbar(QWidget):
 
         container = QFrame()
         container.setObjectName("toolbarContainer")
+        container.setCursor(Qt.CursorShape.ArrowCursor)
+        
         bar_layout = QHBoxLayout(container)
-        bar_layout.setContentsMargins(4, 3, 4, 3)
-        bar_layout.setSpacing(3)
+        bar_layout.setContentsMargins(5, 4, 5, 4)
+        bar_layout.setSpacing(6)
 
-        # 1. Tool Selection Buttons
+        # --- Section 1: Drawing Tools ---
+        tools_frame = QFrame()
+        tools_frame.setObjectName("sectionFrame")
+        tools_layout = QHBoxLayout(tools_frame)
+        tools_layout.setContentsMargins(2, 2, 2, 2)
+        tools_layout.setSpacing(2)
+
         self.tool_group = QButtonGroup(self)
         self.tool_group.setExclusive(True)
 
-        self.btn_rect = QPushButton("🔲")
-        self.btn_rect.setToolTip("Rectangle / Box (R)")
+        self.btn_rect = VectorToolButton("rect", "Рамка (R)")
         self.btn_rect.setCheckable(True)
         self.btn_rect.setChecked(True)
         self.tool_group.addButton(self.btn_rect)
-        bar_layout.addWidget(self.btn_rect)
+        tools_layout.addWidget(self.btn_rect)
 
-        self.btn_arrow = QPushButton("➡️")
-        self.btn_arrow.setToolTip("Arrow (A)")
+        self.btn_arrow = VectorToolButton("arrow", "Стрелка (A)")
         self.btn_arrow.setCheckable(True)
         self.tool_group.addButton(self.btn_arrow)
-        bar_layout.addWidget(self.btn_arrow)
+        tools_layout.addWidget(self.btn_arrow)
 
-        self.btn_pen = QPushButton("✏️")
-        self.btn_pen.setToolTip("Freehand Pen (P)")
+        self.btn_pen = VectorToolButton("pen", "Карандаш / Маркер (P)")
         self.btn_pen.setCheckable(True)
         self.tool_group.addButton(self.btn_pen)
-        bar_layout.addWidget(self.btn_pen)
+        tools_layout.addWidget(self.btn_pen)
 
-        self.btn_blur = QPushButton("💧")
-        self.btn_blur.setToolTip("Blur / Pixelate Content (B)")
+        self.btn_blur = VectorToolButton("blur", "Размыть / Скрыть (B)")
         self.btn_blur.setCheckable(True)
         self.tool_group.addButton(self.btn_blur)
-        bar_layout.addWidget(self.btn_blur)
+        tools_layout.addWidget(self.btn_blur)
 
         self.btn_rect.clicked.connect(lambda: self._select_tool("rect"))
         self.btn_arrow.clicked.connect(lambda: self._select_tool("arrow"))
         self.btn_pen.clicked.connect(lambda: self._select_tool("pen"))
         self.btn_blur.clicked.connect(lambda: self._select_tool("blur"))
 
-        # Separator
-        sep1 = QFrame()
-        sep1.setObjectName("separator")
-        bar_layout.addWidget(sep1)
+        bar_layout.addWidget(tools_frame)
 
-        # 2. Color Palette
+        # --- Section 2: Color Palette ---
+        colors_frame = QFrame()
+        colors_frame.setObjectName("sectionFrame")
+        colors_layout = QHBoxLayout(colors_frame)
+        colors_layout.setContentsMargins(4, 2, 4, 2)
+        colors_layout.setSpacing(4)
+
         self.color_group = QButtonGroup(self)
         self.color_group.setExclusive(True)
 
@@ -188,38 +315,41 @@ class AnnotationToolbar(QWidget):
                 c_btn.setChecked(True)
             self.color_group.addButton(c_btn)
             c_btn.clicked.connect(lambda _, c=hex_c: self._select_color(c))
-            bar_layout.addWidget(c_btn)
+            colors_layout.addWidget(c_btn)
 
-        # Separator
-        sep2 = QFrame()
-        sep2.setObjectName("separator")
-        bar_layout.addWidget(sep2)
+        bar_layout.addWidget(colors_frame)
 
-        # 3. Undo button
-        self.btn_undo = QPushButton("↩️")
-        self.btn_undo.setToolTip("Undo Last Action (Ctrl+Z)")
+        # --- Section 3: Undo Button ---
+        self.btn_undo = VectorToolButton("undo", "Отменить действие (Ctrl+Z или ПКМ)")
         self.btn_undo.clicked.connect(self.undo_requested.emit)
         bar_layout.addWidget(self.btn_undo)
 
-        # 4. Copy to clipboard button
-        self.btn_copy = QPushButton("📋")
-        self.btn_copy.setToolTip("Copy to Clipboard (Ctrl+C)")
+        # Separator
+        sep = QFrame()
+        sep.setObjectName("separator")
+        bar_layout.addWidget(sep)
+
+        # --- Section 4: Actions (Copy, Send, Cancel) ---
+        self.btn_copy = QPushButton("Скопировать")
+        self.btn_copy.setObjectName("actionCopy")
+        self.btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_copy.setToolTip("Скопировать в буфер (Ctrl+C)")
         self.btn_copy.clicked.connect(self.copy_requested.emit)
         bar_layout.addWidget(self.btn_copy)
 
-        # 5. Cancel button
-        self.btn_cancel = QPushButton("❌")
-        self.btn_cancel.setObjectName("cancelBtn")
-        self.btn_cancel.setToolTip("Cancel (Esc)")
-        self.btn_cancel.clicked.connect(self.cancel_requested.emit)
-        bar_layout.addWidget(self.btn_cancel)
-
-        # 6. Send to Discord button
-        self.btn_send = QPushButton("🚀")
-        self.btn_send.setObjectName("sendBtn")
-        self.btn_send.setToolTip("Send to Discord (Enter)")
+        self.btn_send = QPushButton("Отправить")
+        self.btn_send.setObjectName("actionSend")
+        self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_send.setToolTip("Отправить в Discord (Enter или Двойной клик)")
         self.btn_send.clicked.connect(self.send_requested.emit)
         bar_layout.addWidget(self.btn_send)
+
+        self.btn_cancel = QPushButton("✕")
+        self.btn_cancel.setObjectName("actionCancel")
+        self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancel.setToolTip("Отмена (Esc)")
+        self.btn_cancel.clicked.connect(self.cancel_requested.emit)
+        bar_layout.addWidget(self.btn_cancel)
 
         main_layout.addWidget(container)
         self.adjustSize()

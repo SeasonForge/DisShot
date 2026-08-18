@@ -52,8 +52,16 @@ class NotificationManager:
     def notify_upload_success(self, url: str) -> None:
         self.play_success_sound()
         self.show_toast(
-            "Screenshot Uploaded",
-            "Image uploaded to Discord! Link copied to clipboard.",
+            "DisShot — Загружено",
+            "Скриншот отправлен в Discord! Ссылка скопирована в буфер.",
+            QSystemTrayIcon.MessageIcon.Information
+        )
+
+    def notify_copied_to_clipboard(self) -> None:
+        self.play_success_sound()
+        self.show_toast(
+            "DisShot — Буфер обмена",
+            "Скриншот скопирован в буфер обмена.",
             QSystemTrayIcon.MessageIcon.Information
         )
 

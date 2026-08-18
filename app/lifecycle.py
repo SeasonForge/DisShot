@@ -108,8 +108,17 @@ class AppLifecycle(QObject):
         logger.info("Initiating screen capture overlay...")
         self._current_sniper = ScreenSniperOverlay()
         self._current_sniper.captured.connect(self._on_image_captured)
+        self._current_sniper.copied_local.connect(self._on_image_copied_locally)
         self._current_sniper.cancelled.connect(self._on_capture_cancelled)
+        self._current_sniper.destroyed.connect(self._on_capture_cancelled)
         self._current_sniper.start_capture()
+
+    @pyqtSlot()
+    def _on_image_copied_locally(self):
+        self._current_sniper = None
+        logger.info("Image copied locally to clipboard.")
+        if self.settings_manager.config.notifications_enabled:
+            self.notification_manager.notify_copied_to_clipboard()
 
     @pyqtSlot(bytes)
     def _on_image_captured(self, image_bytes: bytes):
