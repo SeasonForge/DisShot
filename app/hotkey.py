@@ -74,6 +74,7 @@ class GlobalHotkeyManager:
         self._listener: Optional[keyboard.Listener] = None
         self._global_hotkeys: Optional[keyboard.GlobalHotKeys] = None
         self._is_running = False
+        self._last_trigger_time = 0.0
 
     def start(self, hotkey_str: Optional[str] = None) -> None:
         if hotkey_str:
@@ -90,6 +91,13 @@ class GlobalHotkeyManager:
             self._start_combo_listener(self.hotkey_str)
 
     def _on_trigger(self) -> None:
+        import time
+        now = time.time()
+        # Debounce: prevent auto-repeat spam when key is held down
+        if now - self._last_trigger_time < 0.4:
+            return
+        self._last_trigger_time = now
+
         logger.info("Global hotkey triggered: %s", self.hotkey_str)
         self.emitter.triggered.emit()
 

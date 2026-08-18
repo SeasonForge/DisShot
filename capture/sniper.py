@@ -293,12 +293,23 @@ class ScreenSniperOverlay(QWidget):
         if event.button() == Qt.MouseButton.RightButton:
             if self._state == OverlayState.EDITING and not self._history.is_empty():
                 self._on_undo()
+            elif self._state == OverlayState.EDITING:
+                # Clear selection and return to ready
+                if self._toolbar:
+                    self._toolbar.hide()
+                self._state = OverlayState.READY
+                self._selected_rect = QRect()
+                self.update()
             else:
                 self._abort_capture()
             return
 
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.pos()
+
+            # Ignore clicks on child toolbar (it handles its own events)
+            if self._toolbar and self._toolbar.isVisible() and self._toolbar.geometry().contains(pos):
+                return
 
             if self._state in (OverlayState.READY, OverlayState.SELECTING):
                 self._start_pos = pos
@@ -307,42 +318,49 @@ class ScreenSniperOverlay(QWidget):
                 self.update()
 
             elif self._state == OverlayState.EDITING:
-                # If clicking outside selection, cancel or ignore
-                if not self._selected_rect.contains(pos):
-                    return
+                if self._selected_rect.contains(pos):
+                    # Start drawing an annotation inside selection
+                    self._start_pos = pos
+                    self._current_pos = pos
 
-                # Start drawing an annotation
-                self._start_pos = pos
-                self._current_pos = pos
-
-                if self._current_tool == "rect":
-                    self._active_annotation = RectangleAnnotation(
-                        start=pos,
-                        end=pos,
-                        color=self._current_color,
-                        stroke_width=3
-                    )
-                elif self._current_tool == "arrow":
-                    self._active_annotation = ArrowAnnotation(
-                        start=pos,
-                        end=pos,
-                        color=self._current_color,
-                        stroke_width=3
-                    )
-                elif self._current_tool == "pen":
-                    self._active_annotation = PenAnnotation(
-                        points=[pos],
-                        color=self._current_color,
-                        stroke_width=3
-                    )
-                elif self._current_tool == "blur":
-                    self._active_annotation = RectangleAnnotation(
-                        start=pos,
-                        end=pos,
-                        color=QColor(88, 101, 242, 180),
-                        stroke_width=1
-                    )
-                self.update()
+                    if self._current_tool == "rect":
+                        self._active_annotation = RectangleAnnotation(
+                            start=pos,
+                            end=pos,
+                            color=self._current_color,
+                            stroke_width=3
+                        )
+                    elif self._current_tool == "arrow":
+                        self._active_annotation = ArrowAnnotation(
+                            start=pos,
+                            end=pos,
+                            color=self._current_color,
+                            stroke_width=3
+                        )
+                    elif self._current_tool == "pen":
+                        self._active_annotation = PenAnnotation(
+                            points=[pos],
+                            color=self._current_color,
+                            stroke_width=3
+                        )
+                    elif self._current_tool == "blur":
+                        self._active_annotation = RectangleAnnotation(
+                            start=pos,
+                            end=pos,
+                            color=QColor(88, 101, 242, 180),
+                            stroke_width=1
+                        )
+                    self.update()
+                else:
+                    # Clicked outside selection -> start new selection immediately!
+                    if self._toolbar:
+                        self._toolbar.hide()
+                    self._history.clear()
+                    self._selected_rect = QRect()
+                    self._start_pos = pos
+                    self._current_pos = pos
+                    self._state = OverlayState.SELECTING
+                    self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         self._current_pos = event.pos()
@@ -374,7 +392,11 @@ class ScreenSniperOverlay(QWidget):
         if self._state == OverlayState.SELECTING:
             sel_rect = self._get_selection_rect()
             if sel_rect.width() < 6 or sel_rect.height() < 6:
-                self._abort_capture()
+                # User simply clicked without dragging -> stay in READY state (do not abort)
+                self._state = OverlayState.READY
+                self._start_pos = None
+                self._current_pos = None
+                self.update()
                 return
 
             self._selected_rect = sel_rect
