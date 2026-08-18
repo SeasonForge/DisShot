@@ -1,6 +1,7 @@
 import io
 import logging
-from typing import Optional
+from enum import Enum, auto
+from typing import Optional, List
 
 from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal, QBuffer, QIODevice
 from PyQt6.QtGui import (
@@ -12,25 +13,45 @@ from PyQt6.QtGui import (
     QPixmap,
     QCursor,
     QFont,
-    QKeySequence,
+    QKeyEvent,
+    QMouseEvent,
 )
 from PyQt6.QtWidgets import QWidget
+
+from capture.annotations import (
+    Annotation,
+    AnnotationHistory,
+    RectangleAnnotation,
+    ArrowAnnotation,
+    PenAnnotation,
+    BlurAnnotation,
+)
+from ui.annotation_toolbar import AnnotationToolbar
+from clipboard.manager import ClipboardManager
 
 logger = logging.getLogger(__name__)
 
 
+class OverlayState(Enum):
+    READY = auto()
+    SELECTING = auto()
+    EDITING = auto()
+
+
 class ScreenSniperOverlay(QWidget):
     """
-    Full-screen multi-monitor overlay for selecting a region to capture.
-    Handles virtual desktop geometry, high DPI scaling, and crosshair rendering.
+    Full-screen multi-monitor overlay for selecting and annotating screen regions.
+    Features:
+    - Multi-monitor DPI-aware virtual desktop capture.
+    - Seamless in-place annotation toolbar (Rectangle, Arrow, Pen, Blur/Pixelate).
+    - Unlimited Undo (Ctrl+Z), Quick Send (Enter), Copy (Ctrl+C), and Cancel (Esc).
     """
-    captured = pyqtSignal(bytes)   # Emits PNG bytes on successful capture
-    cancelled = pyqtSignal()       # Emits when capture is aborted by user
+    captured = pyqtSignal(bytes)   # Emits PNG bytes on confirmation to upload
+    cancelled = pyqtSignal()       # Emits when capture is aborted
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
-        # Window flags for smooth overlay
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -41,11 +62,19 @@ class ScreenSniperOverlay(QWidget):
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.CrossCursor)
 
+        self._state: OverlayState = OverlayState.READY
         self._start_pos: Optional[QPoint] = None
         self._current_pos: Optional[QPoint] = None
-        self._is_selecting: bool = False
+        self._selected_rect: QRect = QRect()
         self._virtual_rect: QRect = QRect()
         self._full_screenshot: Optional[QPixmap] = None
+
+        # Annotation state
+        self._history = AnnotationHistory()
+        self._active_annotation: Optional[Annotation] = None
+        self._current_tool: str = "rect"
+        self._current_color: QColor = QColor("#ED4245")
+        self._toolbar: Optional[AnnotationToolbar] = None
 
     def start_capture(self) -> None:
         """
@@ -57,7 +86,6 @@ class ScreenSniperOverlay(QWidget):
             self.cancelled.emit()
             return
 
-        # Calculate bounding rectangle of all screens (virtual desktop)
         x_min = min(s.geometry().x() for s in screens)
         y_min = min(s.geometry().y() for s in screens)
         x_max = max(s.geometry().x() + s.geometry().width() for s in screens)
@@ -65,14 +93,13 @@ class ScreenSniperOverlay(QWidget):
 
         self._virtual_rect = QRect(x_min, y_min, x_max - x_min, y_max - y_min)
 
-        # Create composite canvas
+        # Grab virtual desktop
         composite = QPixmap(self._virtual_rect.size())
         composite.fill(Qt.GlobalColor.black)
 
         painter = QPainter(composite)
         try:
             for s in screens:
-                # Grab each screen and draw into composite at offset
                 screen_geom = s.geometry()
                 screen_shot = s.grabWindow(0)
                 dest_x = screen_geom.x() - x_min
@@ -89,7 +116,6 @@ class ScreenSniperOverlay(QWidget):
 
         self._full_screenshot = composite
 
-        # Position overlay across all monitors
         self.setGeometry(self._virtual_rect)
         self.show()
         self.activateWindow()
@@ -105,6 +131,94 @@ class ScreenSniperOverlay(QWidget):
         height = abs(self._start_pos.y() - self._current_pos.y())
         return QRect(top_left_x, top_left_y, width, height)
 
+    def _init_toolbar(self) -> None:
+        if not self._toolbar:
+            self._toolbar = AnnotationToolbar(self)
+            self._toolbar.tool_changed.connect(self._on_tool_changed)
+            self._toolbar.color_changed.connect(self._on_color_changed)
+            self._toolbar.undo_requested.connect(self._on_undo)
+            self._toolbar.copy_requested.connect(self._on_copy_local)
+            self._toolbar.cancel_requested.connect(self._abort_capture)
+            self._toolbar.send_requested.connect(self._on_send)
+
+        self._position_toolbar()
+        self._toolbar.show()
+        self._toolbar.raise_()
+
+    def _position_toolbar(self) -> None:
+        if not self._toolbar or self._selected_rect.isEmpty():
+            return
+
+        tb_size = self._toolbar.sizeHint()
+        sel = self._selected_rect
+
+        # Position below the selection by default, aligned to bottom-right or center
+        margin = 8
+        tb_x = sel.right() - tb_size.width()
+        tb_y = sel.bottom() + margin
+
+        # If it overflows screen bottom, place it above selection
+        if tb_y + tb_size.height() > self.height():
+            tb_y = sel.top() - tb_size.height() - margin
+
+        # Clamp horizontal boundaries
+        if tb_x < 5:
+            tb_x = 5
+        if tb_x + tb_size.width() > self.width() - 5:
+            tb_x = self.width() - tb_size.width() - 5
+
+        # If it still overflows top boundary (e.g. selection fills entire screen), place inside bottom
+        if tb_y < 5:
+            tb_y = sel.top() + margin
+
+        self._toolbar.move(tb_x, tb_y)
+
+    def _on_tool_changed(self, tool_name: str) -> None:
+        self._current_tool = tool_name
+
+    def _on_color_changed(self, color: QColor) -> None:
+        self._current_color = color
+
+    def _on_undo(self) -> None:
+        self._history.undo()
+        self.update()
+
+    def _on_copy_local(self) -> None:
+        """Renders the annotated image and copies PNG/image directly to clipboard."""
+        if not self._full_screenshot or self._selected_rect.isEmpty():
+            self._abort_capture()
+            return
+
+        final_pixmap = self._history.render_all(self._full_screenshot, self._selected_rect)
+        
+        # Copy to QClipboard
+        from PyQt6.QtGui import QGuiApplication
+        cb = QGuiApplication.clipboard()
+        if cb:
+            cb.setPixmap(final_pixmap)
+
+        logger.info("Copied annotated screenshot directly to clipboard")
+        self.close()
+        self.cancelled.emit()
+
+    def _on_send(self) -> None:
+        """Renders final annotated image and emits captured signal for Discord upload."""
+        if not self._full_screenshot or self._selected_rect.isEmpty():
+            self._abort_capture()
+            return
+
+        final_pixmap = self._history.render_all(self._full_screenshot, self._selected_rect)
+
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        final_pixmap.save(buffer, "PNG")
+        png_bytes = bytes(buffer.data())
+        buffer.close()
+
+        logger.info("Final image rendered with %d annotations (%d bytes)", self._history.count(), len(png_bytes))
+        self.close()
+        self.captured.emit(png_bytes)
+
     def paintEvent(self, event) -> None:
         if not self._full_screenshot:
             return
@@ -112,53 +226,62 @@ class ScreenSniperOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
-        # 1. Draw base screenshot
+        # 1. Base full screenshot
         painter.drawPixmap(0, 0, self._full_screenshot)
 
-        # 2. Draw semi-transparent dark tint over entire screen
-        dim_brush = QBrush(QColor(0, 0, 0, 110))
+        # 2. Dimmed overlay mask
+        dim_brush = QBrush(QColor(0, 0, 0, 120))
         painter.fillRect(self.rect(), dim_brush)
 
-        sel_rect = self._get_selection_rect()
+        active_rect = self._selected_rect if self._state == OverlayState.EDITING else self._get_selection_rect()
 
-        if self._is_selecting and sel_rect.width() > 1 and sel_rect.height() > 1:
-            # 3. Draw clear un-dimmed region inside the selection
-            painter.drawPixmap(sel_rect, self._full_screenshot, sel_rect)
+        if not active_rect.isEmpty() and active_rect.width() > 1 and active_rect.height() > 1:
+            # 3. Clear un-dimmed region
+            if self._state == OverlayState.EDITING and not self._history.is_empty():
+                # Render baked history inside the crop area
+                baked_crop = self._history.render_all(self._full_screenshot, active_rect)
+                painter.drawPixmap(active_rect.topLeft(), baked_crop)
+            else:
+                painter.drawPixmap(active_rect, self._full_screenshot, active_rect)
 
-            # 4. Draw highlight border (Discord Blurple: #5865F2)
+            # 4. In-progress active annotation preview
+            if self._active_annotation:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                self._active_annotation.render(painter)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+
+            # 5. Selection border (Discord Blurple: #5865F2)
             border_pen = QPen(QColor(88, 101, 242), 2, Qt.PenStyle.SolidLine)
             painter.setPen(border_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(sel_rect)
+            painter.drawRect(active_rect)
 
-            # 5. Draw size badge (e.g. "800 x 600")
-            badge_text = f"{sel_rect.width()} × {sel_rect.height()} px"
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            
-            font = QFont("Segoe UI", 9, QFont.Weight.Bold)
-            painter.setFont(font)
+            # 6. Size badge (when selecting)
+            if self._state == OverlayState.SELECTING:
+                badge_text = f"{active_rect.width()} × {active_rect.height()} px"
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
 
-            badge_w = 110
-            badge_h = 24
-            badge_x = sel_rect.x() + 5
-            badge_y = sel_rect.bottom() + 8
-            
-            # Keep badge within screen boundary
-            if badge_y + badge_h > self.height():
-                badge_y = sel_rect.top() - badge_h - 8
-            if badge_x + badge_w > self.width():
-                badge_x = self.width() - badge_w - 5
+                badge_w = 110
+                badge_h = 24
+                badge_x = active_rect.x() + 5
+                badge_y = active_rect.bottom() + 8
 
-            badge_rect = QRect(badge_x, badge_y, badge_w, badge_h)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(30, 31, 34, 220))
-            painter.drawRoundedRect(badge_rect, 4, 4)
+                if badge_y + badge_h > self.height():
+                    badge_y = active_rect.top() - badge_h - 8
+                if badge_x + badge_w > self.width():
+                    badge_x = self.width() - badge_w - 5
 
-            painter.setPen(QColor(255, 255, 255))
-            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+                badge_rect = QRect(badge_x, badge_y, badge_w, badge_h)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(30, 31, 34, 220))
+                painter.drawRoundedRect(badge_rect, 4, 4)
 
-        elif self._current_pos:
-            # Draw subtle guide crosshairs when moving before click
+                painter.setPen(QColor(255, 255, 255))
+                painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+
+        elif self._current_pos and self._state == OverlayState.READY:
+            # Guide crosshairs
             guide_pen = QPen(QColor(255, 255, 255, 80), 1, Qt.PenStyle.DashLine)
             painter.setPen(guide_pen)
             painter.drawLine(0, self._current_pos.y(), self.width(), self._current_pos.y())
@@ -166,35 +289,155 @@ class ScreenSniperOverlay(QWidget):
 
         painter.end()
 
-    def mousePressEvent(self, event) -> None:
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.RightButton:
+            if self._state == OverlayState.EDITING and not self._history.is_empty():
+                self._on_undo()
+            else:
+                self._abort_capture()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
-            self._start_pos = event.pos()
-            self._current_pos = event.pos()
-            self._is_selecting = True
-            self.update()
-        elif event.button() == Qt.MouseButton.RightButton:
-            # Right click cancels
-            self._abort_capture()
+            pos = event.pos()
 
-    def mouseMoveEvent(self, event) -> None:
+            if self._state in (OverlayState.READY, OverlayState.SELECTING):
+                self._start_pos = pos
+                self._current_pos = pos
+                self._state = OverlayState.SELECTING
+                self.update()
+
+            elif self._state == OverlayState.EDITING:
+                # If clicking outside selection, cancel or ignore
+                if not self._selected_rect.contains(pos):
+                    return
+
+                # Start drawing an annotation
+                self._start_pos = pos
+                self._current_pos = pos
+
+                if self._current_tool == "rect":
+                    self._active_annotation = RectangleAnnotation(
+                        start=pos,
+                        end=pos,
+                        color=self._current_color,
+                        stroke_width=3
+                    )
+                elif self._current_tool == "arrow":
+                    self._active_annotation = ArrowAnnotation(
+                        start=pos,
+                        end=pos,
+                        color=self._current_color,
+                        stroke_width=3
+                    )
+                elif self._current_tool == "pen":
+                    self._active_annotation = PenAnnotation(
+                        points=[pos],
+                        color=self._current_color,
+                        stroke_width=3
+                    )
+                elif self._current_tool == "blur":
+                    self._active_annotation = RectangleAnnotation(
+                        start=pos,
+                        end=pos,
+                        color=QColor(88, 101, 242, 180),
+                        stroke_width=1
+                    )
+                self.update()
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         self._current_pos = event.pos()
-        self.update()
 
-    def mouseReleaseEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.LeftButton and self._is_selecting:
-            self._is_selecting = False
+        if self._state == OverlayState.SELECTING:
+            self.update()
+
+        elif self._state == OverlayState.EDITING and self._active_annotation:
+            pos = event.pos()
+            # Constrain drawing inside selected rect
+            bounded_pos = QPoint(
+                max(self._selected_rect.left(), min(pos.x(), self._selected_rect.right())),
+                max(self._selected_rect.top(), min(pos.y(), self._selected_rect.bottom())),
+            )
+
+            if isinstance(self._active_annotation, (RectangleAnnotation, ArrowAnnotation)):
+                self._active_annotation.end = bounded_pos
+            elif isinstance(self._active_annotation, PenAnnotation):
+                self._active_annotation.points.append(bounded_pos)
+
+            self.update()
+        else:
+            self.update()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+
+        if self._state == OverlayState.SELECTING:
             sel_rect = self._get_selection_rect()
-
-            # Ignore tiny accidental clicks (< 4px)
-            if sel_rect.width() < 5 or sel_rect.height() < 5:
+            if sel_rect.width() < 6 or sel_rect.height() < 6:
                 self._abort_capture()
                 return
 
-            self._finish_capture(sel_rect)
+            self._selected_rect = sel_rect
+            self._state = OverlayState.EDITING
+            self._start_pos = None
+            self._current_pos = None
+            self._init_toolbar()
+            self.update()
 
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key.Key_Escape:
+        elif self._state == OverlayState.EDITING and self._active_annotation:
+            pos = event.pos()
+            bounded_pos = QPoint(
+                max(self._selected_rect.left(), min(pos.x(), self._selected_rect.right())),
+                max(self._selected_rect.top(), min(pos.y(), self._selected_rect.bottom())),
+            )
+
+            if self._current_tool == "blur":
+                blur_rect = QRect(
+                    min(self._active_annotation.start.x(), bounded_pos.x()),
+                    min(self._active_annotation.start.y(), bounded_pos.y()),
+                    abs(self._active_annotation.start.x() - bounded_pos.x()),
+                    abs(self._active_annotation.start.y() - bounded_pos.y())
+                )
+                if blur_rect.width() >= 4 and blur_rect.height() >= 4:
+                    self._history.add(BlurAnnotation(rect=blur_rect, pixel_block_size=10))
+            else:
+                if isinstance(self._active_annotation, (RectangleAnnotation, ArrowAnnotation)):
+                    self._active_annotation.end = bounded_pos
+                self._history.add(self._active_annotation)
+
+            self._active_annotation = None
+            self.update()
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        # Double-click inside selection sends immediately
+        if self._state == OverlayState.EDITING and self._selected_rect.contains(event.pos()):
+            self._on_send()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        key = event.key()
+        modifiers = event.modifiers()
+
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            if self._state == OverlayState.EDITING:
+                self._on_send()
+        elif key == Qt.Key.Key_Escape:
             self._abort_capture()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and key == Qt.Key.Key_Z:
+            self._on_undo()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and key == Qt.Key.Key_C:
+            self._on_copy_local()
+        elif key == Qt.Key.Key_R:
+            if self._toolbar:
+                self._toolbar.btn_rect.click()
+        elif key == Qt.Key.Key_A:
+            if self._toolbar:
+                self._toolbar.btn_arrow.click()
+        elif key == Qt.Key.Key_P:
+            if self._toolbar:
+                self._toolbar.btn_pen.click()
+        elif key == Qt.Key.Key_B:
+            if self._toolbar:
+                self._toolbar.btn_blur.click()
         else:
             super().keyPressEvent(event)
 
@@ -203,20 +446,3 @@ class ScreenSniperOverlay(QWidget):
         self.close()
         self.cancelled.emit()
 
-    def _finish_capture(self, rect: QRect) -> None:
-        if not self._full_screenshot:
-            self._abort_capture()
-            return
-
-        cropped = self._full_screenshot.copy(rect)
-        
-        # Convert QPixmap to PNG bytes
-        buffer = QBuffer()
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        cropped.save(buffer, "PNG")
-        png_bytes = bytes(buffer.data())
-        buffer.close()
-
-        logger.info("Captured region %dx%d (%d bytes)", rect.width(), rect.height(), len(png_bytes))
-        self.close()
-        self.captured.emit(png_bytes)
