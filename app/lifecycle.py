@@ -73,34 +73,22 @@ class AppLifecycle(QObject):
 
     def start(self):
         """
-        Starts the background services and displays onboarding if not configured.
+        Starts the background services and displays readiness notification.
         """
         logger.info("Starting %s...", APP_NAME)
         self.hotkey_manager.start(self.settings_manager.config.hotkey)
 
-        if not self.settings_manager.is_configured():
-            logger.info("Application not configured. Opening settings dialog...")
-            self.notification_manager.show_toast(
-                f"{APP_NAME} Started",
-                "Please connect Discord to start taking screenshots.",
-            )
-            self.open_settings()
-        else:
-            self.notification_manager.show_toast(
-                f"{APP_NAME} Ready",
-                f"Press {self.settings_manager.config.hotkey} to take a screenshot.",
-            )
+        status_text = "Discord подключен" if self.settings_manager.is_configured() else "Локальный режим"
+        self.notification_manager.show_toast(
+            f"{APP_NAME} готов ({status_text})",
+            f"Нажмите {self.settings_manager.config.hotkey} для создания скриншота.",
+        )
 
     @pyqtSlot()
     def trigger_capture(self):
         """
         Initiates the region selection overlay capture.
         """
-        if not self.settings_manager.is_configured():
-            self.notification_manager.notify_not_configured()
-            self.open_settings()
-            return
-
         if self._current_sniper is not None:
             # Capture already in progress
             return
@@ -112,6 +100,18 @@ class AppLifecycle(QObject):
         self._current_sniper.cancelled.connect(self._on_capture_cancelled)
         self._current_sniper.destroyed.connect(self._on_capture_cancelled)
         self._current_sniper.start_capture()
+
+    def _copy_image_to_clipboard(self, image_bytes: bytes):
+        try:
+            from PyQt6.QtGui import QGuiApplication, QImage
+            image = QImage.fromData(image_bytes, "PNG")
+            if not image.isNull():
+                cb = QGuiApplication.clipboard()
+                if cb:
+                    cb.setImage(image)
+                    logger.info("Image copied directly to clipboard as bitmap.")
+        except Exception as e:
+            logger.error("Failed to copy image bitmap to clipboard: %s", e)
 
     def _save_local_copy_if_enabled(self, image_bytes: bytes) -> Optional[str]:
         cfg = self.settings_manager.config
@@ -139,31 +139,46 @@ class AppLifecycle(QObject):
     @pyqtSlot(bytes)
     def _on_image_copied_locally(self, image_bytes: bytes):
         self._current_sniper = None
-        self._save_local_copy_if_enabled(image_bytes)
+        saved_path = self._save_local_copy_if_enabled(image_bytes)
         logger.info("Image copied locally to clipboard.")
         if self.settings_manager.config.notifications_enabled:
-            self.notification_manager.notify_copied_to_clipboard()
+            if saved_path:
+                self.notification_manager.show_toast(
+                    f"{APP_NAME} — Сохранено",
+                    "Скриншот скопирован в буфер и сохранён в папку.",
+                )
+            else:
+                self.notification_manager.notify_copied_to_clipboard()
 
     @pyqtSlot(bytes)
     def _on_image_captured(self, image_bytes: bytes):
         self._current_sniper = None
-        self._save_local_copy_if_enabled(image_bytes)
-        logger.info("Image captured (%d bytes), starting Discord upload...", len(image_bytes))
+        saved_path = self._save_local_copy_if_enabled(image_bytes)
 
         dest = self.settings_manager.config.destination
-        if not dest or not dest.webhook_url:
-            self.notification_manager.notify_not_configured()
-            return
+        if dest and dest.webhook_url:
+            logger.info("Image captured (%d bytes), starting Discord upload...", len(image_bytes))
+            # Perform upload in a background thread to prevent UI freezing
+            uploader = DiscordUploader(dest.webhook_url)
+            
+            def upload_thread_target():
+                result = uploader.upload_image(image_bytes)
+                # Route back via QMetaObject / pyqtSlot invocation
+                self._handle_upload_result(result)
 
-        # Perform upload in a background thread to prevent UI freezing
-        uploader = DiscordUploader(dest.webhook_url)
-        
-        def upload_thread_target():
-            result = uploader.upload_image(image_bytes)
-            # Route back via QMetaObject / pyqtSlot invocation
-            self._handle_upload_result(result)
-
-        threading.Thread(target=upload_thread_target, daemon=True).start()
+            threading.Thread(target=upload_thread_target, daemon=True).start()
+        else:
+            # Local-only mode: copy image bitmap to clipboard and show toast
+            logger.info("Image captured in local mode (%d bytes). Copying to clipboard...", len(image_bytes))
+            self._copy_image_to_clipboard(image_bytes)
+            if self.settings_manager.config.notifications_enabled:
+                if saved_path:
+                    self.notification_manager.show_toast(
+                        f"{APP_NAME} — Сохранено",
+                        "Скриншот скопирован в буфер и сохранён в папку.",
+                    )
+                else:
+                    self.notification_manager.notify_copied_to_clipboard()
 
     def _handle_upload_result(self, result: UploadResult):
         if result.success and result.url:

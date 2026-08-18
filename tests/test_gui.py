@@ -72,6 +72,25 @@ class TestGUIComponents(unittest.TestCase):
         self.assertTrue(bool(overlay.windowFlags() & Qt.WindowType.FramelessWindowHint))
         overlay.close()
 
+    def test_local_capture_lifecycle(self):
+        from app.lifecycle import AppLifecycle
+        from PyQt6.QtGui import QImage, QColor
+        from PyQt6.QtCore import QBuffer, QIODevice
+
+        lifecycle = AppLifecycle(self.app)
+        lifecycle.settings_manager.clear_destination()
+        self.assertFalse(lifecycle.settings_manager.is_configured())
+
+        img = QImage(10, 10, QImage.Format.Format_ARGB32)
+        img.fill(QColor(255, 0, 0))
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        img.save(buffer, "PNG")
+        png_sample = bytes(buffer.data())
+        buffer.close()
+
+        lifecycle._on_image_captured(png_sample)
+
 
 if __name__ == "__main__":
     unittest.main()

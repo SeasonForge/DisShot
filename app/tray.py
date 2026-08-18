@@ -77,7 +77,7 @@ class TrayManager(QObject):
         icon = create_app_icon(connected=is_connected)
         self.tray_icon.setIcon(icon)
         
-        status_str = "Connected" if is_connected else "Not Connected"
+        status_str = "Discord подключен" if is_connected else "Локальный режим"
         self.tray_icon.setToolTip(f"{APP_NAME} ({status_str})")
 
     def _build_menu(self) -> None:
@@ -145,6 +145,4 @@ class TrayManager(QObject):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.open_settings_requested.emit()
         elif reason == QSystemTrayIcon.ActivationReason.Trigger:
-            # Single click can also open settings if not configured or take screenshot
-            if not self.settings_manager.is_configured():
-                self.open_settings_requested.emit()
+            self.take_screenshot_requested.emit()
