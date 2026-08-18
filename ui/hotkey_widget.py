@@ -51,9 +51,9 @@ class HotkeyRecorderWidget(QWidget):
         self.record_btn.keyPressEvent = self._handle_key_press
 
         # Reset button
-        self.reset_btn = QPushButton("Default")
+        self.reset_btn = QPushButton("По умолчанию")
         self.reset_btn.setFixedHeight(34)
-        self.reset_btn.setToolTip("Reset hotkey to default (Print Screen)")
+        self.reset_btn.setToolTip("Сбросить на значение по умолчанию (Print Screen)")
         self.reset_btn.clicked.connect(self._reset_to_default)
 
         layout.addWidget(self.record_btn, 1)
@@ -76,7 +76,7 @@ class HotkeyRecorderWidget(QWidget):
 
     def _start_recording(self):
         self._recording = True
-        self.record_btn.setText("⌨️ Press key combination... (Esc to cancel)")
+        self.record_btn.setText("⌨️ Нажмите клавиши... (Esc — отмена)")
         self.record_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4752C4;

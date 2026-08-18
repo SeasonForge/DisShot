@@ -30,6 +30,33 @@ class TestGUIComponents(unittest.TestCase):
         mgr = SettingsManager()
         dialog = SettingsDialog(mgr)
         self.assertIsNotNone(dialog)
+        # Ensure WindowStaysOnTopHint is NOT set so it does not block Discord / browser
+        self.assertFalse(bool(dialog.windowFlags() & Qt.WindowType.WindowStaysOnTopHint))
+        dialog.close()
+
+    def test_settings_dialog_disconnect_and_save(self):
+        mgr = SettingsManager()
+        mgr.set_destination(DiscordDestinationConfig(
+            type="discord",
+            guild_name="Test Guild",
+            channel_name="test-channel",
+            webhook_url="https://discord.com/api/webhooks/123/abc"
+        ))
+        self.assertTrue(mgr.is_configured())
+
+        dialog = SettingsDialog(mgr)
+        self.assertEqual(dialog.wh_input.text(), "https://discord.com/api/webhooks/123/abc")
+
+        # Simulate disconnect
+        mgr.clear_destination()
+        dialog.wh_input.clear()
+        dialog._update_destination_ui()
+        self.assertEqual(dialog.wh_input.text(), "")
+
+        # Simulate save and close
+        dialog._save_and_close()
+        self.assertFalse(mgr.is_configured())
+        self.assertIsNone(mgr.config.destination)
         dialog.close()
 
     def test_setup_wizard_instantiation(self):

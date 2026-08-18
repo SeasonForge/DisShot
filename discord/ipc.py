@@ -114,7 +114,7 @@ class DiscordIPC:
             if resp.get("evt") == "ERROR":
                 err_data = resp.get("data", {})
                 msg = err_data.get("message", "Authorization was denied in Discord.")
-                return False, None, msg
+                return False, None, f"cancelled: {msg}"
 
             data = resp.get("data", {})
             code = data.get("code")

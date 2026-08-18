@@ -21,3 +21,6 @@ OAUTH_REDIRECT_PORT = 8765
 OAUTH_REDIRECT_URI = f"http://{OAUTH_REDIRECT_HOST}:{OAUTH_REDIRECT_PORT}/callback"
 DISCORD_AUTH_BASE_URL = "https://discord.com/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
+
+# Local storage defaults
+DEFAULT_LOCAL_STORAGE_DIR = str(Path.home() / "Pictures" / APP_NAME)

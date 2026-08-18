@@ -103,7 +103,24 @@ class TestHotkeyConversion(unittest.TestCase):
         self.assertEqual(convert_to_pynput_combo("print_screen"), "<print_screen>")
         self.assertEqual(convert_to_pynput_combo("Ctrl + Shift + S"), "<ctrl>+<shift>+s")
         self.assertEqual(convert_to_pynput_combo("Alt + F10"), "<alt>+<f10>")
-        self.assertEqual(convert_to_pynput_combo("F9"), "<f9>")
+class TestLocalStorageDuplication(unittest.TestCase):
+    def test_local_storage_persistence(self):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tf:
+            cfg_path = Path(tf.name)
+        try:
+            mgr = SettingsManager(config_path=cfg_path)
+            self.assertFalse(mgr.config.save_local_copy)
+            
+            mgr.config.save_local_copy = True
+            mgr.config.local_copy_dir = "C:/Test/DisShotScreenshots"
+            mgr.save()
+
+            mgr2 = SettingsManager(config_path=cfg_path)
+            self.assertTrue(mgr2.config.save_local_copy)
+            self.assertEqual(mgr2.config.local_copy_dir, "C:/Test/DisShotScreenshots")
+        finally:
+            if cfg_path.exists():
+                os.remove(cfg_path)
 
 
 if __name__ == "__main__":

@@ -58,7 +58,10 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
         if error:
             error_description = query_params.get("error_description", [error])[0]
-            self.server.auth_error = f"Discord error: {error_description}"
+            if error == "access_denied" or "cancelled" in str(error_description).lower() or "cancel" in str(error).lower():
+                self.server.auth_error = "Authorization cancelled."
+            else:
+                self.server.auth_error = f"Discord error: {error_description}"
             self._send_html_response(
                 title="Authorization Cancelled",
                 heading="Authorization was cancelled",
@@ -202,6 +205,10 @@ class DiscordAuthFlow(QObject):
             if ipc_ok and ipc_code:
                 logger.info("Direct Discord Desktop authorization succeeded!")
                 self._exchange_code(ipc_code, redirect_uri="")
+                return
+            elif ipc_err and ("cancelled" in ipc_err.lower() or "denied" in ipc_err.lower() or "oauth2" in ipc_err.lower()):
+                logger.info("User cancelled or denied authorization in Discord Desktop (%s). Aborting flow.", ipc_err)
+                self.finished.emit(False, None, "Authorization cancelled.")
                 return
             else:
                 logger.info("Discord Desktop IPC authorization skipped (%s), falling back to browser...", ipc_err)

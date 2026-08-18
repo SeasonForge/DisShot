@@ -26,3 +26,8 @@ ENV/
 # Local AppData configs / temp
 *.log
 local_config.json
+
+# Agent Rules
+AGENTS_GENERAL.md
+.gemini/
+

@@ -1,5 +1,7 @@
 import logging
 import threading
+import datetime
+from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
@@ -15,7 +17,6 @@ from discord.uploader import DiscordUploader
 from clipboard.manager import ClipboardManager
 from ui.notifications import NotificationManager
 from ui.settings_dialog import SettingsDialog
-from ui.setup_dialog import SetupWizardDialog
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,6 @@ class AppLifecycle(QObject):
 
         # 4. Dialog references
         self._settings_dialog: Optional[SettingsDialog] = None
-        self._setup_dialog: Optional[SetupWizardDialog] = None
         self._current_sniper: Optional[ScreenSniperOverlay] = None
 
         # 5. Wire signals
@@ -64,7 +64,7 @@ class AppLifecycle(QObject):
         # Tray signals
         self.tray_manager.take_screenshot_requested.connect(self.trigger_capture)
         self.tray_manager.open_settings_requested.connect(self.open_settings)
-        self.tray_manager.connect_discord_requested.connect(self.open_setup_wizard)
+        self.tray_manager.connect_discord_requested.connect(self.open_settings)
         self.tray_manager.disconnect_discord_requested.connect(self.disconnect_discord)
         self.tray_manager.quit_requested.connect(self.quit_app)
 
@@ -79,12 +79,12 @@ class AppLifecycle(QObject):
         self.hotkey_manager.start(self.settings_manager.config.hotkey)
 
         if not self.settings_manager.is_configured():
-            logger.info("Application not configured. Opening setup wizard...")
+            logger.info("Application not configured. Opening settings dialog...")
             self.notification_manager.show_toast(
                 f"{APP_NAME} Started",
                 "Please connect Discord to start taking screenshots.",
             )
-            self.open_setup_wizard()
+            self.open_settings()
         else:
             self.notification_manager.show_toast(
                 f"{APP_NAME} Ready",
@@ -98,7 +98,7 @@ class AppLifecycle(QObject):
         """
         if not self.settings_manager.is_configured():
             self.notification_manager.notify_not_configured()
-            self.open_setup_wizard()
+            self.open_settings()
             return
 
         if self._current_sniper is not None:
@@ -113,9 +113,33 @@ class AppLifecycle(QObject):
         self._current_sniper.destroyed.connect(self._on_capture_cancelled)
         self._current_sniper.start_capture()
 
-    @pyqtSlot()
-    def _on_image_copied_locally(self):
+    def _save_local_copy_if_enabled(self, image_bytes: bytes) -> Optional[str]:
+        cfg = self.settings_manager.config
+        if not cfg.save_local_copy or not cfg.local_copy_dir:
+            return None
+
+        try:
+            target_dir = Path(cfg.local_copy_dir)
+            target_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            file_path = target_dir / f"Screenshot_{timestamp}.png"
+
+            counter = 1
+            while file_path.exists():
+                file_path = target_dir / f"Screenshot_{timestamp}_{counter}.png"
+                counter += 1
+
+            file_path.write_bytes(image_bytes)
+            logger.info("Local copy saved to: %s", file_path)
+            return str(file_path)
+        except Exception as e:
+            logger.error("Failed to save local screenshot copy: %s", e)
+            return None
+
+    @pyqtSlot(bytes)
+    def _on_image_copied_locally(self, image_bytes: bytes):
         self._current_sniper = None
+        self._save_local_copy_if_enabled(image_bytes)
         logger.info("Image copied locally to clipboard.")
         if self.settings_manager.config.notifications_enabled:
             self.notification_manager.notify_copied_to_clipboard()
@@ -123,6 +147,7 @@ class AppLifecycle(QObject):
     @pyqtSlot(bytes)
     def _on_image_captured(self, image_bytes: bytes):
         self._current_sniper = None
+        self._save_local_copy_if_enabled(image_bytes)
         logger.info("Image captured (%d bytes), starting Discord upload...", len(image_bytes))
 
         dest = self.settings_manager.config.destination
@@ -172,20 +197,6 @@ class AppLifecycle(QObject):
 
     def _on_settings_dialog_closed(self):
         self._settings_dialog = None
-
-    @pyqtSlot()
-    def open_setup_wizard(self):
-        if self._setup_dialog is None:
-            self._setup_dialog = SetupWizardDialog(self.settings_manager)
-            self._setup_dialog.connected.connect(self._on_settings_changed)
-            self._setup_dialog.finished.connect(self._on_setup_dialog_closed)
-
-        self._setup_dialog.show()
-        self._setup_dialog.activateWindow()
-        self._setup_dialog.raise_()
-
-    def _on_setup_dialog_closed(self):
-        self._setup_dialog = None
 
     @pyqtSlot()
     def _on_settings_changed(self):

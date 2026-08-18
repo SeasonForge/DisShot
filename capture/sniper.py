@@ -47,7 +47,7 @@ class ScreenSniperOverlay(QWidget):
     - Unlimited Undo (Ctrl+Z), Quick Send (Enter), Copy (Ctrl+C), and Cancel (Esc).
     """
     captured = pyqtSignal(bytes)   # Emits PNG bytes on confirmation to upload
-    copied_local = pyqtSignal()   # Emits when image is copied to clipboard locally
+    copied_local = pyqtSignal(bytes) # Emits PNG bytes when copied to clipboard locally
     cancelled = pyqtSignal()       # Emits when capture is aborted
 
     def __init__(self, parent: Optional[QWidget] = None):
@@ -200,9 +200,15 @@ class ScreenSniperOverlay(QWidget):
         if cb:
             cb.setPixmap(final_pixmap)
 
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        final_pixmap.save(buffer, "PNG")
+        png_bytes = bytes(buffer.data())
+        buffer.close()
+
         logger.info("Copied annotated screenshot directly to clipboard")
         self.close()
-        self.copied_local.emit()
+        self.copied_local.emit(png_bytes)
 
     def _on_send(self) -> None:
         """Renders final annotated image and emits captured signal for Discord upload."""

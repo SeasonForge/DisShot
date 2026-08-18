@@ -9,6 +9,7 @@ from config import (
     DEFAULT_HOTKEY,
     DEFAULT_DISCORD_CLIENT_ID,
     DEFAULT_DISCORD_CLIENT_SECRET,
+    DEFAULT_LOCAL_STORAGE_DIR,
 )
 from settings.secure_store import encrypt_string, decrypt_string
 
@@ -36,6 +37,9 @@ class AppConfig:
     destination: Optional[DiscordDestinationConfig] = None
     notifications_enabled: bool = True
     play_sound: bool = True
+    start_with_windows: bool = False
+    save_local_copy: bool = False
+    local_copy_dir: str = DEFAULT_LOCAL_STORAGE_DIR
 
 
 class SettingsManager:
@@ -81,6 +85,9 @@ class SettingsManager:
                 destination=destination,
                 notifications_enabled=raw.get("notifications_enabled", True),
                 play_sound=raw.get("play_sound", True),
+                start_with_windows=raw.get("start_with_windows", False),
+                save_local_copy=raw.get("save_local_copy", False),
+                local_copy_dir=raw.get("local_copy_dir", DEFAULT_LOCAL_STORAGE_DIR),
             )
             return self.config
         except Exception as e:
@@ -110,6 +117,9 @@ class SettingsManager:
                 "destination": raw_dest,
                 "notifications_enabled": self.config.notifications_enabled,
                 "play_sound": self.config.play_sound,
+                "start_with_windows": self.config.start_with_windows,
+                "save_local_copy": self.config.save_local_copy,
+                "local_copy_dir": self.config.local_copy_dir,
             }
 
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
