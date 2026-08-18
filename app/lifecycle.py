@@ -143,10 +143,7 @@ class AppLifecycle(QObject):
         logger.info("Image copied locally to clipboard.")
         if self.settings_manager.config.notifications_enabled:
             if saved_path:
-                self.notification_manager.show_toast(
-                    f"{APP_NAME} — Сохранено",
-                    "Скриншот скопирован в буфер и сохранён в папку.",
-                )
+                self.notification_manager.notify_saved_locally("Скриншот скопирован в буфер и сохранён в папку.")
             else:
                 self.notification_manager.notify_copied_to_clipboard()
 
@@ -173,10 +170,7 @@ class AppLifecycle(QObject):
             self._copy_image_to_clipboard(image_bytes)
             if self.settings_manager.config.notifications_enabled:
                 if saved_path:
-                    self.notification_manager.show_toast(
-                        f"{APP_NAME} — Сохранено",
-                        "Скриншот скопирован в буфер и сохранён в папку.",
-                    )
+                    self.notification_manager.notify_saved_locally("Скриншот скопирован в буфер и сохранён в папку.")
                 else:
                     self.notification_manager.notify_copied_to_clipboard()
 

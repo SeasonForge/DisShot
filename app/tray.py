@@ -142,7 +142,5 @@ class TrayManager(QObject):
         self._build_menu()
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.open_settings_requested.emit()
-        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.take_screenshot_requested.emit()
