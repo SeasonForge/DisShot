@@ -4,6 +4,8 @@ from PyQt6.QtCore import QObject, pyqtSignal, QRectF
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QAction
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QWidget
 
+import i18n
+from i18n import t
 from config import APP_NAME
 from settings.manager import SettingsManager
 
@@ -77,7 +79,7 @@ class TrayManager(QObject):
         icon = create_app_icon(connected=is_connected)
         self.tray_icon.setIcon(icon)
         
-        status_str = "Discord подключен" if is_connected else "Локальный режим"
+        status_str = t("tray_status_connected") if is_connected else t("tray_status_local")
         self.tray_icon.setToolTip(f"{APP_NAME} ({status_str})")
 
     def _build_menu(self) -> None:
@@ -106,32 +108,32 @@ class TrayManager(QObject):
         """)
 
         # Take Screenshot
-        take_action = QAction("📸  Take Screenshot", menu)
+        take_action = QAction(t("tray_take_screenshot"), menu)
         take_action.triggered.connect(self.take_screenshot_requested.emit)
         menu.addAction(take_action)
 
         menu.addSeparator()
 
         # Settings
-        settings_action = QAction("⚙️  Settings", menu)
+        settings_action = QAction(t("tray_settings"), menu)
         settings_action.triggered.connect(self.open_settings_requested.emit)
         menu.addAction(settings_action)
 
         # Connect / Disconnect Discord
         if self.settings_manager.is_configured():
             dest_name = self.settings_manager.config.destination.channel_name if self.settings_manager.config.destination else ""
-            disconnect_action = QAction(f"🔗  Disconnect Discord (#{dest_name})", menu)
+            disconnect_action = QAction(t("tray_disconnect_discord", channel=dest_name), menu)
             disconnect_action.triggered.connect(self.disconnect_discord_requested.emit)
             menu.addAction(disconnect_action)
         else:
-            connect_action = QAction("🔗  Connect Discord", menu)
+            connect_action = QAction(t("tray_connect_discord"), menu)
             connect_action.triggered.connect(self.connect_discord_requested.emit)
             menu.addAction(connect_action)
 
         menu.addSeparator()
 
         # Quit
-        quit_action = QAction("❌  Quit", menu)
+        quit_action = QAction(t("tray_quit"), menu)
         quit_action.triggered.connect(self.quit_requested.emit)
         menu.addAction(quit_action)
 

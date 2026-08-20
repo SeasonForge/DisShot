@@ -91,6 +91,35 @@ class TestGUIComponents(unittest.TestCase):
 
         lifecycle._on_image_captured(png_sample)
 
+    def test_settings_dialog_language_toggle(self):
+        import i18n
+        mgr = SettingsManager()
+        dialog = SettingsDialog(mgr)
+        orig = i18n.get_current_language()
+        
+        try:
+            # Force to RU first
+            i18n.set_language("ru")
+            dialog._update_lang_button()
+            dialog.retranslate_ui()
+            self.assertIn("RU", dialog.lang_btn.text())
+            self.assertEqual(dialog.discord_title.text(), "Discord")
+
+            # Toggle to EN
+            dialog._toggle_language()
+            self.assertEqual(i18n.get_current_language(), "en")
+            self.assertIn("EN", dialog.lang_btn.text())
+            self.assertEqual(dialog.card2_title.text(), "Local Copy")
+
+            # Toggle back to RU
+            dialog._toggle_language()
+            self.assertEqual(i18n.get_current_language(), "ru")
+            self.assertIn("RU", dialog.lang_btn.text())
+            self.assertEqual(dialog.card2_title.text(), "Локальная копия")
+        finally:
+            i18n.set_language(orig)
+            dialog.close()
+
 
 if __name__ == "__main__":
     unittest.main()

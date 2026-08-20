@@ -35,8 +35,13 @@ def set_autostart_enabled(enabled: bool) -> bool:
                 if getattr(sys, "frozen", False):
                     exe_path = f'"{Path(sys.executable).resolve()}"'
                 else:
+                    python_exe = Path(sys.executable).resolve()
+                    if python_exe.name.lower() == "python.exe":
+                        pythonw = python_exe.with_name("pythonw.exe")
+                        if pythonw.exists():
+                            python_exe = pythonw
                     main_py = Path(__file__).resolve().parent.parent / "main.py"
-                    exe_path = f'"{Path(sys.executable).resolve()}" "{main_py}"'
+                    exe_path = f'"{python_exe}" "{main_py}"'
 
                 winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, exe_path)
                 logger.info("Autostart enabled in registry: %s -> %s", APP_NAME, exe_path)

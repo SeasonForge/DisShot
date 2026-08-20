@@ -13,6 +13,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+import i18n
+from i18n import t
 from config import APP_NAME, APP_VERSION
 from settings.manager import SettingsManager, DiscordDestinationConfig
 from discord.auth import DiscordAuthFlow
@@ -33,7 +35,7 @@ class SetupWizardDialog(QDialog):
         self.settings_manager = settings_manager
         self._auth_flow: Optional[DiscordAuthFlow] = None
 
-        self.setWindowTitle(f"Welcome to {APP_NAME}")
+        self.setWindowTitle(t("wizard_title", app=APP_NAME))
         self.setFixedSize(500, 560)
         self.setStyleSheet(MODERN_DARK_STYLESHEET)
         
@@ -72,7 +74,7 @@ class SetupWizardDialog(QDialog):
         title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        subtitle = QLabel("Fast screenshots uploaded straight to Discord")
+        subtitle = QLabel(t("wizard_subtitle"))
         subtitle.setObjectName("subtitleLabel")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -96,9 +98,9 @@ class SetupWizardDialog(QDialog):
         steps_layout = QVBoxLayout(steps_widget)
         steps_layout.setSpacing(10)
 
-        s1 = QLabel("1️⃣  Click <b>Connect Discord</b> below")
-        s2 = QLabel("2️⃣  Pick the server and channel in your browser")
-        s3 = QLabel("3️⃣  Press <b>Print Screen</b> → Select area → Done!")
+        s1 = QLabel(t("wizard_step1"))
+        s2 = QLabel(t("wizard_step2"))
+        s3 = QLabel(t("wizard_step3"))
 
         steps_layout.addWidget(s1)
         steps_layout.addWidget(s2)
@@ -124,16 +126,13 @@ class SetupWizardDialog(QDialog):
         notice_layout.setContentsMargins(10, 8, 10, 8)
         notice_layout.setSpacing(4)
         
-        notice_label = QLabel(
-            "<b>💡 Важно:</b> выберите Discord-канал, которым вы управляете (где у вас есть права на отправку файлов/вебхуков).<br>"
-            "<i>Если такого нет — проще всего создать свой приватный сервер с отдельным каналом для скриншотов.</i>"
-        )
+        notice_label = QLabel(t("wizard_notice"))
         notice_label.setWordWrap(True)
         notice_layout.addWidget(notice_label)
         layout.addWidget(notice_widget)
 
         # Status text
-        self.status_label = QLabel("Нажмите кнопку ниже для привязки канала:")
+        self.status_label = QLabel(t("wizard_status_idle"))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("color: #949BA4; font-size: 12px;")
         layout.addWidget(self.status_label)
@@ -149,13 +148,13 @@ class SetupWizardDialog(QDialog):
         btn_layout = QVBoxLayout()
         btn_layout.setSpacing(8)
 
-        self.connect_btn = QPushButton("Connect Discord")
+        self.connect_btn = QPushButton(t("wizard_btn_connect"))
         self.connect_btn.setObjectName("primaryButton")
         self.connect_btn.setFixedHeight(40)
         self.connect_btn.clicked.connect(self._start_connect)
         btn_layout.addWidget(self.connect_btn)
 
-        self.cancel_btn = QPushButton("Cancel Authorization")
+        self.cancel_btn = QPushButton(t("wizard_btn_cancel"))
         self.cancel_btn.setFixedHeight(36)
         self.cancel_btn.clicked.connect(self._cancel_connect)
         self.cancel_btn.hide()
@@ -169,7 +168,7 @@ class SetupWizardDialog(QDialog):
         wh_layout.setContentsMargins(0, 8, 0, 0)
         wh_layout.setSpacing(6)
 
-        wh_label = QLabel("Or paste a Discord Webhook URL directly:")
+        wh_label = QLabel(t("wizard_webhook_hint"))
         wh_label.setStyleSheet("color: #949BA4; font-size: 11px;")
         wh_layout.addWidget(wh_label)
 
@@ -177,7 +176,7 @@ class SetupWizardDialog(QDialog):
         wh_row.setSpacing(6)
         self.wh_input = QLineEdit()
         self.wh_input.setPlaceholderText("https://discord.com/api/webhooks/...")
-        self.wh_save_btn = QPushButton("Save")
+        self.wh_save_btn = QPushButton(t("wizard_webhook_save"))
         self.wh_save_btn.clicked.connect(self._save_direct_webhook)
 
         wh_row.addWidget(self.wh_input)
@@ -189,7 +188,7 @@ class SetupWizardDialog(QDialog):
     def _save_direct_webhook(self):
         url = self.wh_input.text().strip()
         if not url.startswith("https://discord.com/api/webhooks/") and not url.startswith("https://canary.discord.com/api/webhooks/"):
-            QMessageBox.warning(self, "Invalid URL", "Please enter a valid Discord Webhook URL (starts with https://discord.com/api/webhooks/).")
+            QMessageBox.warning(self, t("dialog_invalid_url_title"), t("dialog_invalid_url_msg"))
             return
 
         dest_cfg = DiscordDestinationConfig(
@@ -202,8 +201,8 @@ class SetupWizardDialog(QDialog):
         self.connected.emit()
         QMessageBox.information(
             self,
-            "Ready to use!",
-            "Discord Webhook linked successfully!\n\nPress Print Screen anytime to take a screenshot."
+            t("wizard_success_title"),
+            t("dialog_webhook_linked_msg")
         )
     def _start_connect(self):
         client_id = self.settings_manager.config.discord_client_id
@@ -212,7 +211,7 @@ class SetupWizardDialog(QDialog):
         self.connect_btn.hide()
         self.cancel_btn.show()
         self.progress_bar.show()
-        self.status_label.setText("Authorizing with Discord... Check Discord or browser.")
+        self.status_label.setText(t("wizard_status_authorizing"))
         self.status_label.setStyleSheet("color: #FEE75C; font-size: 12px;")
 
         self._auth_flow = DiscordAuthFlow(client_id=client_id, client_secret=client_secret)
@@ -228,7 +227,7 @@ class SetupWizardDialog(QDialog):
         self.cancel_btn.hide()
         self.connect_btn.show()
         self.connect_btn.setEnabled(True)
-        self.status_label.setText("Click Connect Discord to begin:")
+        self.status_label.setText(t("wizard_status_idle"))
         self.status_label.setStyleSheet("color: #949BA4; font-size: 12px;")
 
     def _on_auth_finished(self, success: bool, destination: Optional[DiscordDestination], message: str):
@@ -252,14 +251,14 @@ class SetupWizardDialog(QDialog):
             self.connected.emit()
             QMessageBox.information(
                 self,
-                "Ready to use!",
-                f"Discord linked successfully!\n\nPress Print Screen anytime to take a screenshot."
+                t("wizard_success_title"),
+                t("wizard_success_msg")
             )
             self.accept()
         elif "cancelled" in message.lower():
-            self.status_label.setText("Authorization was cancelled. Click below to retry:")
+            self.status_label.setText(t("wizard_status_cancelled"))
             self.status_label.setStyleSheet("color: #949BA4; font-size: 12px;")
         else:
-            self.status_label.setText("Connection failed. Click below to try again:")
+            self.status_label.setText(t("wizard_status_failed"))
             self.status_label.setStyleSheet("color: #F23F43; font-size: 12px;")
-            QMessageBox.warning(self, "Connection Failed", f"Could not connect to Discord:\n{message}")
+            QMessageBox.warning(self, t("dialog_conn_failed_title"), t("dialog_conn_failed_msg", error=message))

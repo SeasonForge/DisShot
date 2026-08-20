@@ -48,6 +48,7 @@ class ScreenSniperOverlay(QWidget):
     """
     captured = pyqtSignal(bytes)   # Emits PNG bytes on confirmation to upload
     copied_local = pyqtSignal(bytes) # Emits PNG bytes when copied to clipboard locally
+    saved_as = pyqtSignal(bytes)   # Emits PNG bytes when Save As file is requested
     cancelled = pyqtSignal()       # Emits when capture is aborted
 
     def __init__(self, parent: Optional[QWidget] = None):
@@ -139,6 +140,7 @@ class ScreenSniperOverlay(QWidget):
             self._toolbar.tool_changed.connect(self._on_tool_changed)
             self._toolbar.color_changed.connect(self._on_color_changed)
             self._toolbar.undo_requested.connect(self._on_undo)
+            self._toolbar.save_requested.connect(self._on_save_as)
             self._toolbar.copy_requested.connect(self._on_copy_local)
             self._toolbar.cancel_requested.connect(self._abort_capture)
             self._toolbar.send_requested.connect(self._on_send)
@@ -184,6 +186,25 @@ class ScreenSniperOverlay(QWidget):
     def _on_undo(self) -> None:
         self._history.undo()
         self.update()
+
+    def _on_save_as(self) -> None:
+        """Renders the annotated image and emits saved_as signal to prompt file saving."""
+        if not self._full_screenshot or self._selected_rect.isEmpty():
+            self._abort_capture()
+            return
+
+        self._is_finished = True
+        final_pixmap = self._history.render_all(self._full_screenshot, self._selected_rect)
+
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        final_pixmap.save(buffer, "PNG")
+        png_bytes = bytes(buffer.data())
+        buffer.close()
+
+        logger.info("Save As requested for annotated screenshot (%d bytes)", len(png_bytes))
+        self.close()
+        self.saved_as.emit(png_bytes)
 
     def _on_copy_local(self) -> None:
         """Renders the annotated image and copies PNG/image directly to clipboard."""
@@ -466,6 +487,8 @@ class ScreenSniperOverlay(QWidget):
             self._on_undo()
         elif modifiers & Qt.KeyboardModifier.ControlModifier and key == Qt.Key.Key_C:
             self._on_copy_local()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and key == Qt.Key.Key_S:
+            self._on_save_as()
         elif key == Qt.Key.Key_R:
             if self._toolbar:
                 self._toolbar.btn_rect.click()

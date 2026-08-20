@@ -1,10 +1,27 @@
 import logging
 from typing import Optional
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QKeySequence
+from PyQt6.QtCore import Qt, pyqtSignal, QByteArray
+from PyQt6.QtGui import QKeyEvent, QKeySequence, QIcon, QPixmap, QPainter, QColor
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton
 
+import i18n
+from i18n import t
+
 logger = logging.getLogger(__name__)
+
+SVG_WINDOWS = """<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#94A3B8"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>"""
+SVG_KEYBOARD = """<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>"""
+
+
+def render_svg_icon(svg_str: str, size: int = 16) -> QIcon:
+    renderer = QSvgRenderer(QByteArray(svg_str.encode("utf-8")))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return QIcon(pixmap)
 
 
 def normalize_hotkey_string(hotkey: str) -> str:
@@ -43,7 +60,7 @@ class HotkeyRecorderWidget(QWidget):
 
         # Record button
         self.record_btn = QPushButton()
-        self.record_btn.setFixedHeight(34)
+        self.record_btn.setFixedHeight(36)
         self.record_btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.record_btn.clicked.connect(self._toggle_recording)
         
@@ -51,9 +68,25 @@ class HotkeyRecorderWidget(QWidget):
         self.record_btn.keyPressEvent = self._handle_key_press
 
         # Reset button
-        self.reset_btn = QPushButton("По умолчанию")
-        self.reset_btn.setFixedHeight(34)
-        self.reset_btn.setToolTip("Сбросить на значение по умолчанию (Print Screen)")
+        self.reset_btn = QPushButton(t("btn_default"))
+        self.reset_btn.setFixedHeight(36)
+        self.reset_btn.setToolTip("Print Screen")
+        self.reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #121D30;
+                color: #CBD5E1;
+                border: 1px solid #1E3150;
+                border-radius: 8px;
+                padding: 6px 14px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #1A2B47;
+                border-color: #38BDF8;
+                color: #FFFFFF;
+            }
+        """)
         self.reset_btn.clicked.connect(self._reset_to_default)
 
         layout.addWidget(self.record_btn, 1)
@@ -74,16 +107,23 @@ class HotkeyRecorderWidget(QWidget):
         else:
             self._start_recording()
 
+    def retranslate_ui(self):
+        self.reset_btn.setText(t("btn_default"))
+        if not self._recording:
+            self._update_button_style()
+
     def _start_recording(self):
         self._recording = True
-        self.record_btn.setText("⌨️ Нажмите клавиши... (Esc — отмена)")
+        self.record_btn.setText(t("hotkey_recording"))
+        self.record_btn.setIcon(QIcon())
         self.record_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4752C4;
+                background-color: #1E3A8A;
                 color: #FFFFFF;
-                border: 2px solid #5865F2;
-                border-radius: 6px;
+                border: 2px solid #3B82F6;
+                border-radius: 8px;
                 font-weight: bold;
+                font-size: 12px;
             }
         """)
         self.record_btn.setFocus()
@@ -93,21 +133,26 @@ class HotkeyRecorderWidget(QWidget):
         self._update_button_style()
 
     def _update_button_style(self):
-        display_text = f"⌨️  {self.current_hotkey}"
-        self.record_btn.setText(display_text)
+        self.record_btn.setText(f"  {self.current_hotkey}")
+        if "Win" in self.current_hotkey or "Print" in self.current_hotkey:
+            self.record_btn.setIcon(render_svg_icon(SVG_WINDOWS, 14))
+        else:
+            self.record_btn.setIcon(render_svg_icon(SVG_KEYBOARD, 14))
+
         self.record_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2B2D31;
+                background-color: #0A111E;
                 color: #FFFFFF;
-                border: 1px solid #3F4147;
-                border-radius: 6px;
-                padding: 6px 12px;
+                border: 1px solid #1E2E4A;
+                border-radius: 8px;
+                padding: 6px 14px;
                 font-weight: 600;
+                font-size: 13px;
                 text-align: center;
             }
             QPushButton:hover {
-                background-color: #35373C;
-                border-color: #5865F2;
+                background-color: #0F1A2E;
+                border-color: #3B82F6;
             }
         """)
 

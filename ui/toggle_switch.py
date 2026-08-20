@@ -22,7 +22,7 @@ class ToggleSwitch(QCheckBox):
         is_on = self.isChecked()
 
         # Track background
-        track_color = QColor("#5865F2") if is_on else QColor("#35373C")
+        track_color = QColor("#22C55E") if is_on else QColor("#1E2E4A")
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(track_color))
         painter.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), 12, 12)

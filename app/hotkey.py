@@ -173,7 +173,7 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
 class GlobalHotkeyManager:
     """
     Rock-solid Windows global keyboard hook using SetWindowsHookExW (WH_KEYBOARD_LL)
-    with dedicated message pump thread and debouncing.
+    with dedicated message pump thread, key suppression and debouncing.
     """
     def __init__(self, hotkey_str: str = "Print Screen"):
         self.hotkey_str = hotkey_str

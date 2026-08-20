@@ -40,6 +40,7 @@ class AppConfig:
     start_with_windows: bool = False
     save_local_copy: bool = False
     local_copy_dir: str = DEFAULT_LOCAL_STORAGE_DIR
+    language: str = "system"
 
 
 class SettingsManager:
@@ -88,6 +89,7 @@ class SettingsManager:
                 start_with_windows=raw.get("start_with_windows", False),
                 save_local_copy=raw.get("save_local_copy", False),
                 local_copy_dir=raw.get("local_copy_dir", DEFAULT_LOCAL_STORAGE_DIR),
+                language=raw.get("language", "system"),
             )
             return self.config
         except Exception as e:
@@ -120,6 +122,7 @@ class SettingsManager:
                 "start_with_windows": self.config.start_with_windows,
                 "save_local_copy": self.config.save_local_copy,
                 "local_copy_dir": self.config.local_copy_dir,
+                "language": self.config.language,
             }
 
             self.config_path.parent.mkdir(parents=True, exist_ok=True)

@@ -15,6 +15,7 @@ from capture.sniper import ScreenSniperOverlay
 from upload.base import UploadResult
 from discord.uploader import DiscordUploader
 from clipboard.manager import ClipboardManager
+import i18n
 from ui.notifications import NotificationManager
 from ui.settings_dialog import SettingsDialog
 
@@ -43,12 +44,13 @@ class AppLifecycle(QObject):
         super().__init__()
         self.qapp = qapp
         
-        # 1. Load Settings
+        # 1. Load Settings & Language
         self.settings_manager = SettingsManager()
+        i18n.init_language(self.settings_manager.config.language)
 
         # 2. Setup System Tray & Notifications
         self.tray_manager = TrayManager(self.settings_manager)
-        self.notification_manager = NotificationManager(self.tray_manager.tray_icon)
+        self.notification_manager = NotificationManager(self.tray_manager.tray_icon, self.settings_manager)
 
         # 3. Setup Global Hotkey
         self.hotkey_manager = GlobalHotkeyManager(self.settings_manager.config.hotkey)
@@ -97,6 +99,7 @@ class AppLifecycle(QObject):
         self._current_sniper = ScreenSniperOverlay()
         self._current_sniper.captured.connect(self._on_image_captured)
         self._current_sniper.copied_local.connect(self._on_image_copied_locally)
+        self._current_sniper.saved_as.connect(self._on_image_save_as)
         self._current_sniper.cancelled.connect(self._on_capture_cancelled)
         self._current_sniper.destroyed.connect(self._on_capture_cancelled)
         self._current_sniper.start_capture()
@@ -135,6 +138,40 @@ class AppLifecycle(QObject):
         except Exception as e:
             logger.error("Failed to save local screenshot copy: %s", e)
             return None
+
+    @pyqtSlot(bytes)
+    def _on_image_save_as(self, image_bytes: bytes):
+        self._current_sniper = None
+        logger.info("Handling Save As dialog for screenshot...")
+        from PyQt6.QtWidgets import QFileDialog
+        from PyQt6.QtCore import QStandardPaths
+
+        cfg = self.settings_manager.config
+        if cfg.local_copy_dir and Path(cfg.local_copy_dir).exists():
+            start_dir = Path(cfg.local_copy_dir)
+        else:
+            pics = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)
+            start_dir = Path(pics) if pics else Path.home()
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        default_file = start_dir / f"Screenshot_{timestamp}.png"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            None,
+            "Сохранить скриншот",
+            str(default_file),
+            "PNG Images (*.png);;JPEG Images (*.jpg *.jpeg);;All Files (*.*)"
+        )
+
+        if file_path:
+            try:
+                Path(file_path).write_bytes(image_bytes)
+                logger.info("Screenshot manually saved to: %s", file_path)
+                if cfg.notifications_enabled:
+                    self.notification_manager.notify_saved_locally(f"Файл сохранён:\n{Path(file_path).name}")
+            except Exception as e:
+                logger.error("Failed to save screenshot to %s: %s", file_path, e)
+                self.notification_manager.notify_upload_error(f"Не удалось сохранить файл: {e}")
 
     @pyqtSlot(bytes)
     def _on_image_copied_locally(self, image_bytes: bytes):

@@ -18,6 +18,9 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
 )
 
+import i18n
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 TOOLBAR_STYLESHEET = """
@@ -56,7 +59,7 @@ QPushButton:checked {
     border-color: #5865F2;
 }
 
-QPushButton#actionCopy {
+QPushButton#actionCopy, QPushButton#actionSave {
     background-color: #2B2D31;
     border: 1px solid #383A40;
     color: #DBDEE1;
@@ -64,7 +67,7 @@ QPushButton#actionCopy {
     font-size: 12px;
 }
 
-QPushButton#actionCopy:hover {
+QPushButton#actionCopy:hover, QPushButton#actionSave:hover {
     background-color: #35373C;
     border-color: #4E5058;
     color: #FFFFFF;
@@ -105,13 +108,14 @@ QFrame#separator {
 }
 """
 
-AVAILABLE_COLORS = [
-    ("#ED4245", "Красный"),
-    ("#FEE75C", "Жёлтый"),
-    ("#23A55A", "Зелёный"),
-    ("#5865F2", "Blurple"),
-    ("#FFFFFF", "Белый"),
-]
+def get_available_colors():
+    return [
+        ("#ED4245", t("color_red")),
+        ("#FEE75C", t("color_yellow")),
+        ("#23A55A", t("color_green")),
+        ("#5865F2", t("color_blurple")),
+        ("#FFFFFF", t("color_white")),
+    ]
 
 
 class VectorToolButton(QPushButton):
@@ -205,7 +209,7 @@ class ColorButton(QPushButton):
         super().__init__(parent)
         self.hex_color = hex_color
         self.setCheckable(True)
-        self.setToolTip(f"Цвет: {name}")
+        self.setToolTip(t("color_tooltip", name=name))
         self.setFixedSize(22, 22)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -234,6 +238,7 @@ class AnnotationToolbar(QWidget):
     tool_changed = pyqtSignal(str)          # 'rect', 'arrow', 'pen', 'blur'
     color_changed = pyqtSignal(QColor)
     undo_requested = pyqtSignal()
+    save_requested = pyqtSignal()
     copy_requested = pyqtSignal()
     send_requested = pyqtSignal()
     cancel_requested = pyqtSignal()
@@ -271,23 +276,23 @@ class AnnotationToolbar(QWidget):
         self.tool_group = QButtonGroup(self)
         self.tool_group.setExclusive(True)
 
-        self.btn_rect = VectorToolButton("rect", "Рамка (R)")
+        self.btn_rect = VectorToolButton("rect", t("tool_rect"))
         self.btn_rect.setCheckable(True)
         self.btn_rect.setChecked(True)
         self.tool_group.addButton(self.btn_rect)
         tools_layout.addWidget(self.btn_rect)
 
-        self.btn_arrow = VectorToolButton("arrow", "Стрелка (A)")
+        self.btn_arrow = VectorToolButton("arrow", t("tool_arrow"))
         self.btn_arrow.setCheckable(True)
         self.tool_group.addButton(self.btn_arrow)
         tools_layout.addWidget(self.btn_arrow)
 
-        self.btn_pen = VectorToolButton("pen", "Карандаш / Маркер (P)")
+        self.btn_pen = VectorToolButton("pen", t("tool_pen"))
         self.btn_pen.setCheckable(True)
         self.tool_group.addButton(self.btn_pen)
         tools_layout.addWidget(self.btn_pen)
 
-        self.btn_blur = VectorToolButton("blur", "Размыть / Скрыть (B)")
+        self.btn_blur = VectorToolButton("blur", t("tool_blur"))
         self.btn_blur.setCheckable(True)
         self.tool_group.addButton(self.btn_blur)
         tools_layout.addWidget(self.btn_blur)
@@ -309,7 +314,7 @@ class AnnotationToolbar(QWidget):
         self.color_group = QButtonGroup(self)
         self.color_group.setExclusive(True)
 
-        for i, (hex_c, name) in enumerate(AVAILABLE_COLORS):
+        for i, (hex_c, name) in enumerate(get_available_colors()):
             c_btn = ColorButton(hex_c, name)
             if i == 0:
                 c_btn.setChecked(True)
@@ -320,7 +325,7 @@ class AnnotationToolbar(QWidget):
         bar_layout.addWidget(colors_frame)
 
         # --- Section 3: Undo Button ---
-        self.btn_undo = VectorToolButton("undo", "Отменить действие (Ctrl+Z или ПКМ)")
+        self.btn_undo = VectorToolButton("undo", t("tool_undo"))
         self.btn_undo.clicked.connect(self.undo_requested.emit)
         bar_layout.addWidget(self.btn_undo)
 
@@ -329,25 +334,32 @@ class AnnotationToolbar(QWidget):
         sep.setObjectName("separator")
         bar_layout.addWidget(sep)
 
-        # --- Section 4: Actions (Copy, Send, Cancel) ---
-        self.btn_copy = QPushButton("Скопировать")
+        # --- Section 4: Actions (Save, Copy, Send, Cancel) ---
+        self.btn_save = QPushButton(t("btn_save"))
+        self.btn_save.setObjectName("actionSave")
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save.setToolTip(t("btn_save_tooltip"))
+        self.btn_save.clicked.connect(self.save_requested.emit)
+        bar_layout.addWidget(self.btn_save)
+
+        self.btn_copy = QPushButton(t("btn_copy"))
         self.btn_copy.setObjectName("actionCopy")
         self.btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_copy.setToolTip("Скопировать в буфер (Ctrl+C)")
+        self.btn_copy.setToolTip(t("btn_copy_tooltip"))
         self.btn_copy.clicked.connect(self.copy_requested.emit)
         bar_layout.addWidget(self.btn_copy)
 
-        self.btn_send = QPushButton("Отправить")
+        self.btn_send = QPushButton(t("btn_send"))
         self.btn_send.setObjectName("actionSend")
         self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_send.setToolTip("Отправить в Discord (Enter или Двойной клик)")
+        self.btn_send.setToolTip(t("btn_send_tooltip"))
         self.btn_send.clicked.connect(self.send_requested.emit)
         bar_layout.addWidget(self.btn_send)
 
         self.btn_cancel = QPushButton("✕")
         self.btn_cancel.setObjectName("actionCancel")
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_cancel.setToolTip("Отмена (Esc)")
+        self.btn_cancel.setToolTip(t("btn_cancel_tooltip"))
         self.btn_cancel.clicked.connect(self.cancel_requested.emit)
         bar_layout.addWidget(self.btn_cancel)
 

@@ -22,6 +22,9 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
+import i18n
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -212,22 +215,30 @@ class NotificationManager:
     Handles user-facing status notifications with modern floating toasts
     and tray balloons.
     """
-    def __init__(self, tray_icon: Optional[QSystemTrayIcon] = None):
+    def __init__(self, tray_icon: Optional[QSystemTrayIcon] = None, settings_manager: Optional[object] = None):
         self.tray_icon = tray_icon
+        self.settings_manager = settings_manager
         self._active_toast: Optional[ModernBlurToast] = None
 
     def set_tray_icon(self, tray_icon: QSystemTrayIcon) -> None:
         self.tray_icon = tray_icon
 
+    def set_settings_manager(self, settings_manager: object) -> None:
+        self.settings_manager = settings_manager
+
     def play_success_sound(self) -> None:
+        if self.settings_manager and hasattr(self.settings_manager, "config"):
+            if not self.settings_manager.config.play_sound:
+                return
+
         if WINSOUND_AVAILABLE:
             try:
-                # 1. Standard Windows notification sound
-                wav_path = r"C:\Windows\Media\Windows Notify System Generic.wav"
+                # Single crisp notification sound (single tone)
+                wav_path = r"C:\Windows\Media\Windows Ding.wav"
                 if Path(wav_path).exists():
                     winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
                     return
-                winsound.PlaySound("SystemNotification", winsound.SND_ALIAS | winsound.SND_ASYNC)
+                winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS | winsound.SND_ASYNC)
                 return
             except Exception:
                 pass
@@ -237,6 +248,10 @@ class NotificationManager:
                 pass
 
     def play_error_sound(self) -> None:
+        if self.settings_manager and hasattr(self.settings_manager, "config"):
+            if not self.settings_manager.config.play_sound:
+                return
+
         if WINSOUND_AVAILABLE:
             try:
                 wav_path = r"C:\Windows\Media\Windows Foreground.wav"
@@ -286,8 +301,8 @@ class NotificationManager:
     def notify_upload_success(self, url: str) -> None:
         self.play_success_sound()
         self.show_toast(
-            "DisShot — Загружено",
-            "Скриншот отправлен в Discord!\nСсылка скопирована в буфер.",
+            t("toast_upload_success_title"),
+            t("toast_upload_success_msg"),
             QSystemTrayIcon.MessageIcon.Information,
             duration_ms=2800,
             icon_type="success"
@@ -296,18 +311,18 @@ class NotificationManager:
     def notify_copied_to_clipboard(self) -> None:
         self.play_success_sound()
         self.show_toast(
-            "DisShot — Буфер обмена",
-            "Скриншот скопирован в буфер обмена.",
+            t("toast_clipboard_title"),
+            t("toast_clipboard_msg"),
             QSystemTrayIcon.MessageIcon.Information,
             duration_ms=2500,
             icon_type="success"
         )
 
-    def notify_saved_locally(self, message: str = "Скриншот скопирован в буфер и сохранён в папку.") -> None:
+    def notify_saved_locally(self, message: Optional[str] = None) -> None:
         self.play_success_sound()
         self.show_toast(
-            "DisShot — Сохранено",
-            message,
+            t("toast_saved_title"),
+            message or t("toast_saved_msg"),
             QSystemTrayIcon.MessageIcon.Information,
             duration_ms=2600,
             icon_type="success"
@@ -316,8 +331,8 @@ class NotificationManager:
     def notify_upload_error(self, error_message: str) -> None:
         self.play_error_sound()
         self.show_toast(
-            "Ошибка загрузки",
-            f"Не удалось загрузить скриншот:\n{error_message}",
+            t("toast_error_title"),
+            t("toast_error_msg", error=error_message),
             QSystemTrayIcon.MessageIcon.Warning,
             duration_ms=3500,
             icon_type="error"
@@ -326,8 +341,8 @@ class NotificationManager:
     def notify_not_configured(self) -> None:
         self.play_error_sound()
         self.show_toast(
-            "Discord не подключен",
-            "Подключите Discord в настройках для автоматической загрузки.",
+            t("toast_not_configured_title"),
+            t("toast_not_configured_msg"),
             QSystemTrayIcon.MessageIcon.Warning,
             duration_ms=3000,
             icon_type="info"
