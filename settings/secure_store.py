@@ -50,6 +50,11 @@ except Exception as e:
     DPAPI_AVAILABLE = False
 
 
+class DPAPIError(RuntimeError):
+    """Raised when Windows DPAPI operations fail."""
+    pass
+
+
 def encrypt_string(plain_text: str) -> str:
     """
     Encrypts a plaintext string using Windows DPAPI (CryptProtectData)
@@ -59,8 +64,7 @@ def encrypt_string(plain_text: str) -> str:
         return ""
     
     if not DPAPI_AVAILABLE:
-        # Fallback if DPAPI not available
-        return base64.b64encode(plain_text.encode("utf-8")).decode("ascii")
+        raise DPAPIError("Windows DPAPI is not available on this system")
 
     try:
         data_bytes = plain_text.encode("utf-8")
@@ -88,8 +92,7 @@ def encrypt_string(plain_text: str) -> str:
         return base64.b64encode(encrypted_bytes).decode("ascii")
     except Exception as e:
         logger.error("Failed to encrypt with DPAPI: %s", e)
-        # Fallback to base64 encoding to prevent crash
-        return base64.b64encode(plain_text.encode("utf-8")).decode("ascii")
+        raise DPAPIError(f"Failed to encrypt secret with DPAPI: {e}") from e
 
 
 def decrypt_string(encrypted_b64: str) -> str:
@@ -106,10 +109,7 @@ def decrypt_string(encrypted_b64: str) -> str:
         return ""
 
     if not DPAPI_AVAILABLE:
-        try:
-            return encrypted_bytes.decode("utf-8")
-        except Exception:
-            return ""
+        raise DPAPIError("Windows DPAPI is not available on this system")
 
     try:
         blob_in = DATA_BLOB()
@@ -128,15 +128,23 @@ def decrypt_string(encrypted_b64: str) -> str:
         )
 
         if not success:
-            # Maybe it was stored as raw base64 plaintext fallback
-            return encrypted_bytes.decode("utf-8")
+            # Check for legacy plaintext base64 fallback migration
+            try:
+                legacy_text = encrypted_bytes.decode("utf-8")
+                logger.warning("Decrypted legacy unencrypted base64 secret payload.")
+                return legacy_text
+            except Exception:
+                return ""
 
         decrypted_bytes = ctypes.string_at(blob_out.pbData, blob_out.cbData)
         _LocalFree(blob_out.pbData)
         return decrypted_bytes.decode("utf-8")
     except Exception as e:
-        logger.debug("DPAPI decryption attempt fallback: %s", e)
+        # Try legacy base64 plaintext fallback for backward compatibility
         try:
-            return encrypted_bytes.decode("utf-8")
+            legacy_text = encrypted_bytes.decode("utf-8")
+            logger.warning("Decrypted legacy unencrypted base64 secret payload after DPAPI error: %s", e)
+            return legacy_text
         except Exception:
+            logger.error("Failed to decrypt secret with DPAPI: %s", e)
             return ""

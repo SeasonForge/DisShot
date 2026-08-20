@@ -4,13 +4,14 @@ from pathlib import Path
 import tempfile
 import json
 
-from settings.secure_store import encrypt_string, decrypt_string
+import base64
+from unittest.mock import patch
+from settings.secure_store import encrypt_string, decrypt_string, DPAPIError
 from settings.manager import SettingsManager, DiscordDestinationConfig, AppConfig
 from discord.auth import generate_pkce_pair
 from discord.destination import DiscordDestination
 from upload.base import UploadResult, Destination
 from discord.uploader import DiscordUploader
-
 
 class TestSecureStore(unittest.TestCase):
     def test_dpapi_roundtrip(self):
@@ -30,6 +31,22 @@ class TestSecureStore(unittest.TestCase):
         encrypted = encrypt_string(text)
         decrypted = decrypt_string(encrypted)
         self.assertEqual(text, decrypted)
+
+    def test_legacy_unencrypted_base64_migration(self):
+        legacy_secret = "https://discord.com/api/webhooks/999/legacy_token"
+        legacy_b64 = base64.b64encode(legacy_secret.encode("utf-8")).decode("ascii")
+        decrypted = decrypt_string(legacy_b64)
+        self.assertEqual(legacy_secret, decrypted)
+
+    def test_encrypt_raises_when_dpapi_fails(self):
+        with patch("settings.secure_store._CryptProtectData", return_value=False):
+            with self.assertRaises(DPAPIError):
+                encrypt_string("my_secret_token")
+
+    def test_encrypt_raises_when_dpapi_unavailable(self):
+        with patch("settings.secure_store.DPAPI_AVAILABLE", False):
+            with self.assertRaises(DPAPIError):
+                encrypt_string("my_secret_token")
 
 
 class TestSettingsManager(unittest.TestCase):
