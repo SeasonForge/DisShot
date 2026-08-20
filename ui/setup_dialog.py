@@ -46,6 +46,9 @@ class SetupWizardDialog(QDialog):
             | Qt.WindowType.WindowStaysOnTopHint
         )
 
+        from app.tray import create_app_icon
+        self.setWindowIcon(create_app_icon(connected=False))
+
         self._init_ui()
         self._center_on_screen()
 

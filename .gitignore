@@ -7,6 +7,7 @@ __pycache__/
 dist/
 build/
 *.spec
+!DisShot.spec
 *.egg-info/
 .installed.cfg
 *.egg

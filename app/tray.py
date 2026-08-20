@@ -1,6 +1,8 @@
+import os
+import sys
 import logging
 from typing import Optional
-from PyQt6.QtCore import QObject, pyqtSignal, QRectF
+from PyQt6.QtCore import QObject, pyqtSignal, QRectF, Qt
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QAction
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QWidget
 
@@ -12,10 +14,62 @@ from settings.manager import SettingsManager
 logger = logging.getLogger(__name__)
 
 
-def create_app_icon(connected: bool = True) -> QIcon:
+def get_custom_icon_path() -> Optional[str]:
     """
-    Procedurally draws a crisp camera / reticle icon for the system tray.
+    Finds icon.png in the project root or PyInstaller runtime directory.
     """
+    if getattr(sys, "frozen", False):
+        base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    else:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    candidate = os.path.join(base_dir, "icon.png")
+    if os.path.exists(candidate):
+        return candidate
+    return None
+
+
+def create_app_icon(connected: bool = True, for_window: bool = False) -> QIcon:
+    """
+    Creates the application icon. Uses icon.png if present,
+    with an optional live status dot for tray.
+    """
+    icon_path = get_custom_icon_path()
+
+    if icon_path:
+        if for_window:
+            return QIcon(icon_path)
+
+        # For tray: add status dot over custom icon
+        base_pixmap = QPixmap(icon_path)
+        size = 64
+        pixmap = QPixmap(size, size)
+        pixmap.fill(QColor(0, 0, 0, 0))
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
+        # Draw scaled custom icon
+        scaled_icon = base_pixmap.scaled(
+            56, 56,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = (size - scaled_icon.width()) // 2
+        y = (size - scaled_icon.height()) // 2
+        painter.drawPixmap(x, y, scaled_icon)
+
+        # Status indicator dot in bottom-right corner (Green for connected, Red for disconnected)
+        status_color = QColor(35, 165, 90) if connected else QColor(242, 63, 67)
+        painter.setBrush(QBrush(status_color))
+        painter.setPen(QPen(QColor(18, 19, 23), 2.5))
+        painter.drawEllipse(QRectF(42, 42, 16, 16))
+
+        painter.end()
+        return QIcon(pixmap)
+
+    # Fallback: Procedurally drawn camera icon
     size = 64
     pixmap = QPixmap(size, size)
     pixmap.fill(QColor(0, 0, 0, 0))
@@ -23,27 +77,22 @@ def create_app_icon(connected: bool = True) -> QIcon:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-    # Base rounded rectangle background (Discord Blurple: #5865F2)
     bg_color = QColor(88, 101, 242)
     painter.setBrush(QBrush(bg_color))
     painter.setPen(QPen(QColor(255, 255, 255, 40), 2))
     painter.drawRoundedRect(QRectF(4, 4, 56, 56), 14, 14)
 
-    # Camera lens circle
     painter.setBrush(QBrush(QColor(30, 31, 34)))
     painter.setPen(QPen(QColor(255, 255, 255), 3))
     painter.drawEllipse(QRectF(18, 18, 28, 28))
 
-    # Inner aperture reflection
     painter.setBrush(QBrush(QColor(88, 101, 242)))
     painter.setPen(QPen(QColor(0, 0, 0, 0)))
     painter.drawEllipse(QRectF(26, 26, 12, 12))
 
-    # Small flash dot
     painter.setBrush(QBrush(QColor(255, 255, 255)))
     painter.drawEllipse(QRectF(44, 12, 6, 6))
 
-    # Status indicator dot in bottom-right corner (Green for connected, Red for disconnected)
     status_color = QColor(35, 165, 90) if connected else QColor(242, 63, 67)
     painter.setBrush(QBrush(status_color))
     painter.setPen(QPen(QColor(30, 31, 34), 2))

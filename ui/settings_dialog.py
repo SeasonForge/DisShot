@@ -427,6 +427,9 @@ class SettingsDialog(QDialog):
             | Qt.WindowType.WindowMinimizeButtonHint
         )
 
+        from app.tray import create_app_icon
+        self.setWindowIcon(create_app_icon(connected=self.settings_manager.is_configured()))
+
         self._init_ui()
         self._center_on_screen()
         self._update_destination_ui()
@@ -465,8 +468,11 @@ class SettingsDialog(QDialog):
         header_icon.setProperty("class", "iconBadge")
         header_icon.setFixedSize(46, 46)
         header_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        if Path("icon.ico").exists():
-            pix = QPixmap("icon.ico").scaled(28, 28, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        
+        from app.tray import get_custom_icon_path
+        custom_icon = get_custom_icon_path()
+        if custom_icon and os.path.exists(custom_icon):
+            pix = QPixmap(custom_icon).scaled(30, 30, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             header_icon.setPixmap(pix)
         else:
             header_icon.setPixmap(get_svg_pixmap(SVG_CAMERA, "#60A5FA", 24))
