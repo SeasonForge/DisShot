@@ -207,19 +207,13 @@ class ScreenSniperOverlay(QWidget):
         self.saved_as.emit(png_bytes)
 
     def _on_copy_local(self) -> None:
-        """Renders the annotated image and copies PNG/image directly to clipboard."""
+        """Renders the annotated image and emits copied_local signal."""
         if not self._full_screenshot or self._selected_rect.isEmpty():
             self._abort_capture()
             return
 
         self._is_finished = True
         final_pixmap = self._history.render_all(self._full_screenshot, self._selected_rect)
-        
-        # Copy to QClipboard
-        from PyQt6.QtGui import QGuiApplication
-        cb = QGuiApplication.clipboard()
-        if cb:
-            cb.setPixmap(final_pixmap)
 
         buffer = QBuffer()
         buffer.open(QIODevice.OpenModeFlag.WriteOnly)
@@ -227,7 +221,7 @@ class ScreenSniperOverlay(QWidget):
         png_bytes = bytes(buffer.data())
         buffer.close()
 
-        logger.info("Copied annotated screenshot directly to clipboard")
+        logger.info("Screenshot rendered for local clipboard copy (%d bytes)", len(png_bytes))
         self.close()
         self.copied_local.emit(png_bytes)
 

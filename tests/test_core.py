@@ -12,6 +12,35 @@ from discord.auth import generate_pkce_pair
 from discord.destination import DiscordDestination
 from upload.base import UploadResult, Destination
 from discord.uploader import DiscordUploader
+from clipboard.manager import ClipboardManager
+
+
+class TestClipboard(unittest.TestCase):
+    def test_copy_empty(self):
+        self.assertFalse(ClipboardManager.copy_text(""))
+        self.assertFalse(ClipboardManager.copy_image(b""))
+
+    def test_copy_text_win32(self):
+        with patch("clipboard.manager.user32.SetClipboardData", return_value=123):
+            success = ClipboardManager.copy_text("DisShot Test Clipboard Text")
+            self.assertTrue(success)
+
+    def test_copy_image(self):
+        from PyQt6.QtGui import QImage, QColor
+        from PyQt6.QtCore import QBuffer, QIODevice
+        
+        qimg = QImage(10, 10, QImage.Format.Format_RGB32)
+        qimg.fill(QColor("red"))
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        qimg.save(buffer, "PNG")
+        png_bytes = bytes(buffer.data())
+        buffer.close()
+
+        with patch("clipboard.manager.user32.SetClipboardData", return_value=123):
+            success = ClipboardManager.copy_image(png_bytes)
+            self.assertTrue(success)
+
 
 class TestSecureStore(unittest.TestCase):
     def test_dpapi_roundtrip(self):

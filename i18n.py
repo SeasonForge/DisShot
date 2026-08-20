@@ -54,7 +54,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         
         # Footer
         "footer_brand": "SeasonForge",
-        "footer_slogan": "Разработано с душой в SeasonForge ❤️",
+        "footer_slogan": "От игроков для игроков • SeasonForge",
         "footer_donate": "Сказать спасибо (донат)",
         "btn_save_and_close": "Сохранить и закрыть",
         
@@ -168,7 +168,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         
         # Footer
         "footer_brand": "SeasonForge",
-        "footer_slogan": "Crafted with love at SeasonForge ❤️",
+        "footer_slogan": "Built by gamers, for gamers • SeasonForge",
         "footer_donate": "Say thanks (Donate)",
         "btn_save_and_close": "Save & Close",
         

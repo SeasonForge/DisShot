@@ -109,17 +109,8 @@ class AppLifecycle(QObject):
         self._current_sniper.destroyed.connect(self._on_capture_cancelled)
         self._current_sniper.start_capture()
 
-    def _copy_image_to_clipboard(self, image_bytes: bytes):
-        try:
-            from PyQt6.QtGui import QGuiApplication, QImage
-            image = QImage.fromData(image_bytes, "PNG")
-            if not image.isNull():
-                cb = QGuiApplication.clipboard()
-                if cb:
-                    cb.setImage(image)
-                    logger.info("Image copied directly to clipboard as bitmap.")
-        except Exception as e:
-            logger.error("Failed to copy image bitmap to clipboard: %s", e)
+    def _copy_image_to_clipboard(self, image_bytes: bytes) -> bool:
+        return ClipboardManager.copy_image(image_bytes)
 
     def _save_local_copy_if_enabled(self, image_bytes: bytes) -> Optional[str]:
         cfg = self.settings_manager.config
