@@ -5,11 +5,11 @@
 **Fast, lightweight, and 100% private screenshot utility for Windows.**  
 Captures screen areas with annotations and uploads directly to your personal Discord channel with instant CDN links in your clipboard.
 
+[![Website](https://img.shields.io/badge/Website-disshot.vercel.app-5865F2.svg?logo=vercel&logoColor=white)](https://disshot.vercel.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6.svg?logo=windows)](https://github.com/SeasonForge/DisShot/releases)
 [![Discord](https://img.shields.io/badge/Discord-Native%20OAuth2-5865F2.svg?logo=discord&logoColor=white)](https://discord.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](https://python.org)
-[![Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-ff69b4.svg)](https://github.com/SeasonForge/DisShot)
 
 ```text
 [ PrintScreen ] ──► [ Select Area & Blur/Arrow ] ──► [ Direct Discord CDN Link in Clipboard ] (Ctrl + V)
@@ -23,10 +23,10 @@ Captures screen areas with annotations and uploads directly to your personal Dis
 
 ## ✨ Why DisShot?
 
-Traditional screenshot services (Lightshot, Gyazo, etc.) store your private data on third-party servers with predictable short URLs that web crawlers can scrape. 
+Traditional cloud screenshot tools and public image hosts store your private data on third-party servers with predictable short URLs that web crawlers can scrape. 
 
 **DisShot operates differently:**
-* **100% Private Cloud:** Your screenshots are uploaded directly from your PC to your private Discord channel.
+* **Private Discord Cloud:** Your screenshots are uploaded directly from your PC to your private Discord channel.
 * **No Middleman Servers:** Only you and the people you share the direct Discord CDN link with can view the image.
 * **Instant Sharing:** Press your hotkey, select the area, and the cryptographically secure `cdn.discordapp.com/...` link is already in your clipboard ready to paste (`Ctrl+V`).
 
