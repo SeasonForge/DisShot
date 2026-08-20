@@ -822,7 +822,7 @@ class SettingsDialog(QDialog):
 
         brand_box = QVBoxLayout()
         brand_box.setSpacing(1)
-        brand_title = QLabel("Pupki Industries™")
+        brand_title = QLabel("SeasonForge")
         brand_title.setStyleSheet("color: #94A3B8; font-weight: 700; font-size: 12px;")
         self.brand_subtitle = QLabel(t("footer_slogan"))
         self.brand_subtitle.setStyleSheet("color: #64748B; font-size: 11px;")
@@ -897,7 +897,8 @@ class SettingsDialog(QDialog):
         self._update_destination_ui()
 
     def _open_donation_link(self):
-        QDesktopServices.openUrl(QUrl("https://boosty.to"))
+        from config import DONATE_URL
+        QDesktopServices.openUrl(QUrl(DONATE_URL))
 
     def _toggle_webhook_input(self):
         if self.webhook_container.isVisible():

@@ -53,8 +53,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "btn_make_test_capture": "Сделать тестовый снимок",
         
         # Footer
-        "footer_brand": "Pupki Industries™",
-        "footer_slogan": "Разрабатываем полезные штуки с душой.",
+        "footer_brand": "SeasonForge",
+        "footer_slogan": "Разработано с душой в SeasonForge ❤️",
         "footer_donate": "Сказать спасибо (донат)",
         "btn_save_and_close": "Сохранить и закрыть",
         
@@ -167,8 +167,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "btn_make_test_capture": "Take Test Screenshot",
         
         # Footer
-        "footer_brand": "Pupki Industries™",
-        "footer_slogan": "Crafting useful things with soul.",
+        "footer_brand": "SeasonForge",
+        "footer_slogan": "Crafted with love at SeasonForge ❤️",
         "footer_donate": "Say thanks (Donate)",
         "btn_save_and_close": "Save & Close",
         

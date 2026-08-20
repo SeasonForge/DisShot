@@ -142,8 +142,10 @@ DisShot/
 
 ---
 
-## 📄 License
+## 📄 License & Donations
 
 Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
 
-Developed with passion by **[Pupki Industries™](https://t.me/pupki_industries)**.
+Developed with passion by **[SeasonForge](https://github.com/SeasonForge/DisShot)** ❤️  
+Support development via Crypto: **[Donate with Plisio](https://plisio.net/donate/IF4FNXAb)**
+

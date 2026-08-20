@@ -40,6 +40,8 @@ class AppLifecycle(QObject):
     Central coordinator managing application state, capture flow,
     hotkeys, tray icon, and background uploads.
     """
+    upload_finished = pyqtSignal(UploadResult)
+
     def __init__(self, qapp: QApplication):
         super().__init__()
         self.qapp = qapp
@@ -72,6 +74,9 @@ class AppLifecycle(QObject):
 
         # Hotkey trigger
         self.hotkey_manager.emitter.triggered.connect(self.trigger_capture)
+
+        # Thread-safe background upload result routing
+        self.upload_finished.connect(self._handle_upload_result)
 
     def start(self):
         """
@@ -158,25 +163,25 @@ class AppLifecycle(QObject):
 
         file_path, _ = QFileDialog.getSaveFileName(
             None,
-            "Сохранить скриншот",
+            "Save Screenshot As",
             str(default_file),
-            "PNG Images (*.png);;JPEG Images (*.jpg *.jpeg);;All Files (*.*)"
+            "PNG Image (*.png);;All Files (*)"
         )
 
         if file_path:
             try:
                 Path(file_path).write_bytes(image_bytes)
                 logger.info("Screenshot manually saved to: %s", file_path)
-                if cfg.notifications_enabled:
-                    self.notification_manager.notify_saved_locally(f"Файл сохранён:\n{Path(file_path).name}")
+                if self.settings_manager.config.notifications_enabled:
+                    self.notification_manager.notify_saved_locally(f"Сохранено: {Path(file_path).name}")
             except Exception as e:
-                logger.error("Failed to save screenshot to %s: %s", file_path, e)
-                self.notification_manager.notify_upload_error(f"Не удалось сохранить файл: {e}")
+                logger.error("Failed to save screenshot: %s", e)
 
     @pyqtSlot(bytes)
     def _on_image_copied_locally(self, image_bytes: bytes):
         self._current_sniper = None
         saved_path = self._save_local_copy_if_enabled(image_bytes)
+        self._copy_image_to_clipboard(image_bytes)
         logger.info("Image copied locally to clipboard.")
         if self.settings_manager.config.notifications_enabled:
             if saved_path:
@@ -192,13 +197,16 @@ class AppLifecycle(QObject):
         dest = self.settings_manager.config.destination
         if dest and dest.webhook_url:
             logger.info("Image captured (%d bytes), starting Discord upload...", len(image_bytes))
-            # Perform upload in a background thread to prevent UI freezing
+            # Perform upload in a background thread and route result safely to Qt main thread
             uploader = DiscordUploader(dest.webhook_url)
             
             def upload_thread_target():
-                result = uploader.upload_image(image_bytes)
-                # Route back via QMetaObject / pyqtSlot invocation
-                self._handle_upload_result(result)
+                try:
+                    result = uploader.upload_image(image_bytes)
+                    self.upload_finished.emit(result)
+                except Exception as e:
+                    logger.error("Background upload thread failed: %s", e)
+                    self.upload_finished.emit(UploadResult(success=False, error_message=str(e)))
 
             threading.Thread(target=upload_thread_target, daemon=True).start()
         else:
@@ -211,6 +219,7 @@ class AppLifecycle(QObject):
                 else:
                     self.notification_manager.notify_copied_to_clipboard()
 
+    @pyqtSlot(UploadResult)
     def _handle_upload_result(self, result: UploadResult):
         if result.success and result.url:
             logger.info("Upload succeeded. Setting clipboard URL: %s", result.url)

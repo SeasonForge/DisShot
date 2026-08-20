@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "DisShot"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 # AppData configuration directory
 APPDATA_DIR = Path(os.getenv("APPDATA", Path.home())) / APP_NAME
@@ -24,3 +24,7 @@ DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 
 # Local storage defaults
 DEFAULT_LOCAL_STORAGE_DIR = str(Path.home() / "Pictures" / APP_NAME)
+
+# Project & Donation links
+PROJECT_REPO_URL = "https://github.com/SeasonForge/DisShot"
+DONATE_URL = "https://plisio.net/donate/IF4FNXAb"
