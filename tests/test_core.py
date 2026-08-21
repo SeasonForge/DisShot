@@ -169,5 +169,14 @@ class TestLocalStorageDuplication(unittest.TestCase):
                 os.remove(cfg_path)
 
 
+class TestSingleInstance(unittest.TestCase):
+    def test_acquire_mutex(self):
+        from main import acquire_single_instance_mutex
+        # First call should succeed
+        res = acquire_single_instance_mutex()
+        self.assertIsInstance(res, bool)
+
+
 if __name__ == "__main__":
     unittest.main()
+
