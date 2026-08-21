@@ -92,10 +92,13 @@ def main():
     ipc_client.connectToServer(SINGLE_INSTANCE_IPC_NAME)
     if ipc_client.waitForConnected(400) or not is_primary:
         logger.info("Another instance of %s is already running. Activating existing instance...", APP_NAME)
-        if ipc_client.state() == QLocalSocket.SocketState.ConnectedState:
-            ipc_client.write(b"ACTIVATE\n")
-            ipc_client.waitForBytesWritten(500)
-            ipc_client.disconnectFromServer()
+        if ipc_client.state() == QLocalSocket.LocalSocketState.ConnectedState:
+            try:
+                ipc_client.write(b"ACTIVATE\n")
+                ipc_client.waitForBytesWritten(500)
+                ipc_client.disconnectFromServer()
+            except Exception:
+                pass
         sys.exit(0)
 
     # 4. Set global application window icon for taskbar and dialogs

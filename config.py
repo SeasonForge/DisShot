@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "DisShot"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 
 # AppData configuration directory
 APPDATA_DIR = Path(os.getenv("APPDATA", Path.home())) / APP_NAME
