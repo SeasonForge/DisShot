@@ -94,10 +94,21 @@ class AppLifecycle(QObject):
     @pyqtSlot()
     def trigger_capture(self):
         """
-        Initiates the region selection overlay capture.
+        Initiates the region selection overlay capture with a short delay
+        to ensure any open dialogs or tray menus are fully hidden by DWM.
         """
         if self._current_sniper is not None:
             # Capture already in progress
+            return
+
+        if self._settings_dialog and self._settings_dialog.isVisible():
+            self._settings_dialog.hide()
+
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(180, self._launch_capture_overlay)
+
+    def _launch_capture_overlay(self):
+        if self._current_sniper is not None:
             return
 
         logger.info("Initiating screen capture overlay...")

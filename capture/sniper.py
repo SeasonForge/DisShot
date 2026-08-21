@@ -307,12 +307,30 @@ class ScreenSniperOverlay(QWidget):
             painter.setPen(QColor(255, 255, 255))
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
 
-        elif self._current_pos and self._state == OverlayState.READY:
-            # Guide crosshairs
-            guide_pen = QPen(QColor(255, 255, 255, 80), 1, Qt.PenStyle.DashLine)
-            painter.setPen(guide_pen)
-            painter.drawLine(0, self._current_pos.y(), self.width(), self._current_pos.y())
-            painter.drawLine(self._current_pos.x(), 0, self._current_pos.x(), self.height())
+        if self._state == OverlayState.READY:
+            # Top instruction banner
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            tip_text = "ЛКМ: Выделите область  •  ПКМ / Esc: Отмена"
+            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
+            tip_w = 340
+            tip_h = 32
+            tip_x = (self.width() - tip_w) // 2
+            tip_y = 24
+            tip_rect = QRect(tip_x, tip_y, tip_w, tip_h)
+
+            painter.setPen(QPen(QColor(88, 101, 242, 160), 1))
+            painter.setBrush(QBrush(QColor(20, 24, 34, 230)))
+            painter.drawRoundedRect(tip_rect, 6, 6)
+
+            painter.setPen(QColor("#E2E8F0"))
+            painter.drawText(tip_rect, Qt.AlignmentFlag.AlignCenter, tip_text)
+
+            if self._current_pos:
+                # Guide crosshairs
+                guide_pen = QPen(QColor(255, 255, 255, 80), 1, Qt.PenStyle.DashLine)
+                painter.setPen(guide_pen)
+                painter.drawLine(0, self._current_pos.y(), self.width(), self._current_pos.y())
+                painter.drawLine(self._current_pos.x(), 0, self._current_pos.x(), self.height())
 
         painter.end()
 
